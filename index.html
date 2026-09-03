@@ -26,11 +26,19 @@
         <h1>Practice English<br>in Real Life</h1>
         <p class="subtitle">Speak. Make mistakes. Learn. Try again.</p>
         <button class="btn primary large" id="btn-start-practice">Start Practice →</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <button class="btn" id="btn-infinite" style="background:#0f172a;color:#fff">∞ Infinite Practice</button>
+          <button class="btn ghost" id="btn-surprise">🎲 Surprise Me</button>
+        </div>
         <div class="hero-stats">
           <span><b id="stat-streak">0</b> day streak</span>
           <span class="dot">·</span>
           <span><b id="stat-completed">0</b> scenarios</span>
         </div>
+      </div>
+      <div id="daily-card" class="daily-card" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:16px;padding:14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px">
+        <div><b>🔥 Daily Challenge</b><br><small id="daily-title" style="opacity:.9">Loading...</small></div>
+        <span style="background:#fff;color:#ef4444;border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px">+50 XP</span>
       </div>
 
       <div id="continue-card" class="continue-card hidden">
@@ -58,13 +66,40 @@
         </div>
         <span class="chev">›</span>
       </div>
+      <div class="section-head">
+        <h2>Endless Journey</h2>
+      </div>
+      <div class="free-teaser" id="btn-endless" style="border:1px dashed #6c5cff">
+        <div class="free-icon" style="background:linear-gradient(135deg,#06b6d4,#6c5cff)">🌎</div>
+        <div>
+          <b>Endless Journey</b>
+          <p>One trip, many linked situations.</p>
+        </div>
+        <span class="chev">›</span>
+      </div>
+      <div id="ai-generated" style="margin-top:16px">
+        <div class="section-head">
+          <h2>AI generated for you</h2>
+          <button class="link" id="btn-refresh-ai">↻ Refresh</button>
+        </div>
+        <div id="ai-grid" class="card-grid"></div>
+      </div>
     </section>
 
     <!-- PRACTICE (all situations) -->
     <section class="view" data-view="practice">
       <h2 class="page-title">Choose a situation</h2>
       <p class="page-sub">5–10 minutes each. Real dialogues.</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn primary" id="btn-practice-infinite">∞ Infinite</button>
+        <button class="btn" id="btn-practice-surprise">🎲 Surprise</button>
+        <select id="category-filter" style="margin-left:auto;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700"><option value="all">All categories</option><option>Travel</option><option>Hotels</option><option>Food</option><option>Transport</option><option>Shopping</option><option>Work</option><option>Everyday</option><option>Social</option></select>
+      </div>
       <div id="practice-grid" class="card-grid"></div>
+      <div id="practice-ai" style="margin-top:16px">
+        <h3 style="font-size:15px;margin-bottom:8px">✨ AI Generated</h3>
+        <div id="practice-ai-grid" class="card-grid"></div>
+      </div>
     </section>
 
     <!-- SCENARIO -->
@@ -179,6 +214,8 @@
     <section class="view" data-view="profile">
       <h2 class="page-title">Profile</h2>
       <div class="settings-card">
+        <h3>What do you need English for?</h3>
+        <div id="profile-purpose" class="purpose-grid"></div>
         <h3>Level</h3>
         <div id="profile-levels" class="level-row"></div>
         <h3>Preferences</h3>
@@ -187,6 +224,16 @@
         <button class="btn danger wide" id="btn-reset">Reset progress</button>
       </div>
     </section>
+
+<!-- PURPOSE MODAL (first run) -->
+<div id="purpose-modal" class="overlay hidden">
+  <div class="dialog">
+    <h3>What do you need English for?</h3>
+    <p class="muted">We'll personalize your practice.</p>
+    <div id="purpose-options" class="level-options"></div>
+    <button class="btn ghost wide" id="btn-skip-purpose" style="margin-top:10px">Skip</button>
+  </div>
+</div>
   </main>
 
   <!-- BOTTOM NAV -->
@@ -208,6 +255,7 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/generator.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/app.js"></script>
 </body>

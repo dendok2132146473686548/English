@@ -2,10 +2,12 @@
 const LS_KEY = 'erl_state_v1';
 const DEFAULT_STATE = {
   level:'B1', completed:[], mistakes:[], streak:0, lastDate:null,
-  totalMinutes:0, current:null
+  totalMinutes:0, current:null, generatedHistory:[], purpose:null
 };
 let state = loadState();
 let currentScenario=null, turnIndex=0, turnScores=[], hintLevel=0, scenarioMistakes=[], globalScores=[];
+let endlessChain=null, endlessIndex=0;
+let aiCache=[];
 
 function loadState(){
   try{
@@ -22,9 +24,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   updateStreak();
   renderAll();
   bindEvents();
-  // level badge
   document.getElementById('btn-level-badge').textContent = getLevel();
-  // check for ?scenario param (for deep link)
+  if(!state.purpose) setTimeout(showPurposeModal, 800);
 });
 
 function updateStreak(){
@@ -44,7 +45,10 @@ function renderAll(){
   renderMistakes();
   renderFreeTopics();
   renderProfileLevels();
+  renderPurpose();
   updateStats();
+  renderDailyChallenge();
+  refreshAiGrid();
 }
 
 function bindEvents(){
@@ -57,6 +61,14 @@ function bindEvents(){
   });
   document.getElementById('btn-start-practice').addEventListener('click',()=> showView('practice'));
   document.getElementById('btn-free-teaser').addEventListener('click',()=> showView('free'));
+  const bi=document.getElementById('btn-infinite'); if(bi) bi.addEventListener('click',()=> handleInfinite());
+  const bs=document.getElementById('btn-surprise'); if(bs) bs.addEventListener('click', handleSurprise);
+  const be=document.getElementById('btn-endless'); if(be) be.addEventListener('click', startEndlessJourney);
+  const ra=document.getElementById('btn-refresh-ai'); if(ra) ra.addEventListener('click', refreshAiGrid);
+  const dc=document.getElementById('daily-card'); if(dc) dc.addEventListener('click', ()=>{ const sc=getDailyChallenge(); SCENARIOS[sc.id]=sc; startScenario(sc.id); });
+  const bpi=document.getElementById('btn-practice-infinite'); if(bpi) bpi.addEventListener('click',()=> handleInfinite(document.getElementById('category-filter').value));
+  const bps=document.getElementById('btn-practice-surprise'); if(bps) bps.addEventListener('click', handleSurprise);
+  const cf=document.getElementById('category-filter'); if(cf) cf.addEventListener('change', renderPractice);
   document.getElementById('btn-level-badge').addEventListener('click', openLevelModal);
   document.getElementById('btn-continue').addEventListener('click', ()=>{
     if(state.current) startScenario(state.current);
@@ -82,9 +94,20 @@ function bindEvents(){
   holdBtn.addEventListener('pointerup', stopHoldSpeak);
   holdBtn.addEventListener('pointercancel', stopHoldSpeak);
   document.getElementById('btn-next-scenario').addEventListener('click',()=>{
-    const ids=Object.keys(SCENARIOS); const cur=currentScenario.id;
-    const idx=ids.indexOf(cur); const next=ids[(idx+1)%ids.length];
-    startScenario(next);
+    if(endlessChain && endlessIndex < endlessChain.length-1){
+      endlessIndex++;
+      startScenario(endlessChain[endlessIndex].id);
+      return;
+    }
+    const ids=Object.keys(SCENARIOS).filter(k=>!k.startsWith('gen-') && !k.startsWith('free:'));
+    const cur=currentScenario.id;
+    let idx=ids.indexOf(cur);
+    if(idx===-1) idx=0;
+    const next=ids[(idx+1)%ids.length] || ids[0];
+    // if next is coming-soon, generate infinite instead
+    const nxtSit=SITUATIONS.find(s=>s.id===next);
+    if(nxtSit && nxtSit.coming) handleInfinite();
+    else startScenario(next);
   });
   document.getElementById('btn-try-again').addEventListener('click',()=> startScenario(currentScenario.id));
   document.getElementById('btn-review-mistakes').addEventListener('click',()=> showView('mistakes'));
@@ -138,16 +161,89 @@ function renderHome(){
   document.getElementById('stat-completed').textContent = state.completed.length;
 }
 function renderPractice(){
+  const filter=document.getElementById('category-filter')?.value || 'all';
+  let list=SITUATIONS;
+  if(filter!=='all'){
+    // map filter name to ids: simple contains
+    list=SITUATIONS.filter(s=> s.title.toLowerCase().includes(filter.toLowerCase()) || s.sub.toLowerCase().includes(filter.toLowerCase()));
+    if(list.length===0) list=SITUATIONS;
+  }
   const grid=document.getElementById('practice-grid');
-  grid.innerHTML = SITUATIONS.map(s=>{
+  grid.innerHTML = list.map(s=>{
     const coming=s.coming?'<span class="card-badge">Soon</span>':'<span class="card-badge" style="background:#dcfce7;color:#166534">Ready</span>';
     return `<div class="card ${s.coming?'coming':''}" data-id="${s.id}">${coming}<div class="card-icon">${s.icon}</div><h3>${s.title}</h3><p>${s.sub}</p></div>`;
   }).join('');
   grid.querySelectorAll('.card').forEach(c=> c.addEventListener('click',()=>{
     const s=SITUATIONS.find(x=>x.id===c.dataset.id);
-    if(s.coming) alert('Coming soon — in MVP try Airport / Hotel / Restaurant / Taxi.');
-    else startScenario(s.id);
+    if(s.coming){
+      // generate infinite variant for coming-soon categories
+      const catMap={Shopping:'Shopping', 'Job Interview':'Work', Hospital:'Everyday'};
+      const cat=catMap[s.title]||'Travel';
+      handleInfinite(cat);
+    } else startScenario(s.id);
   }));
+  // practice AI grid
+  const pa=document.getElementById('practice-ai-grid');
+  if(pa){
+    if(aiCache.length===0) refreshAiGrid();
+    // filter aiCache by category if needed
+    let filtered=aiCache;
+    if(filter!=='all') filtered=aiCache.filter(sc=> sc.meta.category===filter);
+    if(filtered.length===0) filtered=aiCache;
+    pa.innerHTML = filtered.slice(0,4).map(sc=> `<div class="card" data-gen="${sc.id}" style="border:1px solid #e9d5ff"><span class="card-badge" style="background:linear-gradient(135deg,#6c5cff,#a78bfa);color:#fff">AI</span><div class="card-icon">${sc.icon}</div><h3>${sc.title.split(' — ')[0]}</h3><p>${sc.meta.location} · ${sc.goal}</p></div>`).join('');
+    pa.querySelectorAll('.card').forEach(c=> c.addEventListener('click',()=> startScenario(c.dataset.gen)));
+  }
+}
+
+function renderDailyChallenge(){
+  const el=document.getElementById('daily-title');
+  if(!el) return;
+  const sc=getDailyChallenge();
+  // cache daily so same day same scenario (don't save to SCENARIOS yet, just display)
+  if(!window._dailyId || window._dailyId!==sc.id){
+    window._dailyId=sc.id;
+    SCENARIOS[sc.id]=sc;
+    window._dailyScenario=sc;
+  }
+  el.textContent = window._dailyScenario.title;
+}
+
+function refreshAiGrid(){
+  aiCache=[];
+  for(let i=0;i<3;i++){
+    const sc=generateScenario();
+    SCENARIOS[sc.id]=sc;
+    aiCache.push(sc);
+  }
+  const grid=document.getElementById('ai-grid');
+  if(!grid) return;
+  grid.innerHTML = aiCache.map(sc=> `<div class="card" data-gen="${sc.id}" style="border:1px solid #e9d5ff"><span class="card-badge" style="background:linear-gradient(135deg,#6c5cff,#22d3ee);color:#fff">AI</span><div class="card-icon">${sc.icon}</div><h3>${sc.title.split(' — ')[0]}</h3><p>${sc.meta.location} · ${sc.goal}</p></div>`).join('');
+  grid.querySelectorAll('.card').forEach(c=> c.addEventListener('click',()=> startScenario(c.dataset.gen)));
+  // also refresh practice ai if visible
+  const pa=document.getElementById('practice-ai-grid');
+  if(pa && document.querySelector('[data-view="practice"].active')) renderPractice();
+}
+
+function handleInfinite(category){
+  let cat = category && category!=='all' ? category : null;
+  // personalize: if user has purpose, bias
+  const sc=generateScenario({category:cat});
+  SCENARIOS[sc.id]=sc;
+  startScenario(sc.id);
+}
+function handleSurprise(){
+  const sc=generateScenario();
+  SCENARIOS[sc.id]=sc;
+  startScenario(sc.id);
+}
+function startEndlessJourney(){
+  const chain=generateChain(5);
+  endlessChain=chain.scenarios;
+  endlessIndex=0;
+  // add all to SCENARIOS
+  endlessChain.forEach(sc=> SCENARIOS[sc.id]=sc);
+  alert(`🌎 Endless Journey: Trip to ${chain.location} — ${chain.scenarios.length} linked scenarios. Your story begins now!`);
+  startScenario(endlessChain[0].id);
 }
 
 // ---------- LEVEL ----------
@@ -177,6 +273,26 @@ function renderProfileLevels(){
     renderProfileLevels(); renderProgress();
   }));
 }
+function renderPurpose(){
+  const c=document.getElementById('profile-purpose');
+  if(!c) return;
+  c.innerHTML = PURPOSES.map(p=> `<div class="purpose-card ${state.purpose===p.id?'active':''}" data-id="${p.id}"><b>${p.icon} ${p.title}</b><small>${p.desc}</small></div>`).join('');
+  c.querySelectorAll('.purpose-card').forEach(el=> el.addEventListener('click',()=>{
+    state.purpose=el.dataset.id; saveState(); renderPurpose();
+  }));
+}
+function showPurposeModal(){
+  const m=document.getElementById('purpose-modal');
+  const opts=document.getElementById('purpose-options');
+  opts.innerHTML = PURPOSES.map(p=> `<div class="purpose-card" data-id="${p.id}" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer"><div><b>${p.icon} ${p.title}</b><br><small>${p.desc}</small></div><span>›</span></div>`).join('');
+  opts.querySelectorAll('.purpose-card').forEach(o=> o.addEventListener('click',()=>{
+    state.purpose=o.dataset.id; saveState(); renderPurpose();
+    m.classList.add('hidden');
+  }));
+  document.getElementById('btn-skip-purpose').addEventListener('click',()=> m.classList.add('hidden'), {once:true});
+  m.addEventListener('click', e=>{ if(e.target.id==='purpose-modal') m.classList.add('hidden'); });
+  m.classList.remove('hidden');
+}
 
 // ---------- SCENARIO ----------
 function startScenario(id){
@@ -186,7 +302,12 @@ function startScenario(id){
   turnIndex=0; turnScores=[]; hintLevel=0; scenarioMistakes=[];
   showView('scenario');
   document.getElementById('scenario-icon').textContent=currentScenario.icon;
-  document.getElementById('scenario-title').textContent=currentScenario.title;
+  let title=currentScenario.title;
+  if(endlessChain && endlessChain.some(s=>s.id===id)){
+    const pos=endlessChain.findIndex(s=>s.id===id)+1;
+    title += ` (${pos}/${endlessChain.length})`;
+  }
+  document.getElementById('scenario-title').textContent=title;
   document.getElementById('scenario-goal').textContent='Goal: '+currentScenario.goal;
   const chat=document.getElementById('chat');
   chat.innerHTML = `<div class="bubble agent"><div class="role">${currentScenario.character.role}</div>${currentScenario.desc}</div>`;
@@ -309,13 +430,19 @@ function finishScenario(){
     natural: Math.max(0, avg - 5 + (scenarioMistakes.length? -5:5)),
     understanding: Math.max(0, avg + 4)
   };
+  const isDaily = window._dailyScenario && currentScenario.id===window._dailyScenario.id;
+  if(isDaily) state.totalMinutes += 2; // bonus for daily
   // save completed
-  state.completed.push({ id:currentScenario.id, score:avg, date:new Date().toISOString().slice(0,10), breakdown });
+  const metaCat = currentScenario.meta ? currentScenario.meta.category : null;
+  state.completed.push({ id:currentScenario.id, category:metaCat, score:avg, date:new Date().toISOString().slice(0,10), breakdown });
   state.totalMinutes += 6;
-  // detect pattern for fix card
-  const wantErrors = scenarioMistakes.filter(m=>/want to/i.test(m.correction)).length;
+  // endless journey completion
+  if(endlessChain && endlessIndex===endlessChain.length-1){
+    state.completed.push({ id:'journey-done', score:100, date:new Date().toISOString().slice(0,10) });
+    state.totalMinutes += 4;
+  }
   saveState();
-  showResult(avg, breakdown, wantErrors);
+  showResult(avg, breakdown, 0);
 }
 
 function showResult(avg, breakdown, wantErrors){

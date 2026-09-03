@@ -225,8 +225,18 @@ const FREE_STARTERS = {
 
 const ACHIEVEMENTS_LIST = [
   { id:'first', icon:'🏆', title:'First Conversation', desc:'Complete your first scenario', check:(s)=>s.completed.length>=1 },
-  { id:'airport', icon:'✈️', title:'Airport Expert', desc:'Complete 5 airport scenarios', check:(s)=>s.completed.filter(c=>c.id==='airport').length>=5 },
+  { id:'airport', icon:'✈️', title:'Airport Expert', desc:'Complete 5 airport scenarios', check:(s)=>s.completed.filter(c=>c.id==='airport' || c.id.startsWith('gen-') && c.category==='Travel').length>=5 },
   { id:'streak7', icon:'🔥', title:'7 Day Streak', desc:'Practice 7 days in a row', check:(s)=>s.streak>=7 },
   { id:'perfect', icon:'✨', title:'No Mistakes', desc:'Complete a scenario with 100%', check:(s)=>s.completed.some(c=>c.score===100) },
   { id:'ten', icon:'💯', title:'10 Scenarios', desc:'Complete 10 scenarios', check:(s)=>s.completed.length>=10 },
+  { id:'infinite', icon:'∞', title:'Infinite Explorer', desc:'Complete 5 AI-generated scenarios', check:(s)=>s.completed.filter(c=>c.id.startsWith('gen-')).length>=5 },
+  { id:'journey', icon:'🌎', title:'Endless Journey', desc:'Complete an Endless Journey', check:(s)=>s.completed.some(c=>c.id==='journey-done') },
+];
+
+const PURPOSES = [
+  {id:'travel', icon:'✈️', title:"I'm travelling", desc:"Airport → Hotel → Restaurant → Taxi", cats:['Travel','Hotels','Food','Transport']},
+  {id:'work', icon:'💼', title:"I work internationally", desc:"Meeting → Presentation → Interview", cats:['Work','Social']},
+  {id:'move', icon:'🏠', title:"I'm moving abroad", desc:"Housing → Bank → Doctor → Shopping", cats:['Everyday','Shopping','Hotels']},
+  {id:'study', icon:'📚', title:"I'm studying", desc:"Everyday → Social → Work", cats:['Everyday','Social','Work']},
+  {id:'general', icon:'🌟', title:"Just improve my English", desc:"Mixed real-life situations", cats:null},
 ];

@@ -218,6 +218,13 @@ body{
 .level-row{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}
 .level-row button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 12px;font-weight:700;font-size:12px;cursor:pointer}
 .level-row button.active{background:var(--text);color:#fff;border-color:var(--text)}
+.purpose-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 14px}
+.purpose-card{border:1px solid var(--line);border-radius:14px;padding:10px;background:var(--card);cursor:pointer;text-align:left}
+.purpose-card.active{border-color:var(--primary);background:#f5f3ff}
+.purpose-card b{font-size:13px}
+.purpose-card small{color:var(--muted);font-size:11px;display:block;margin-top:2px}
+.daily-card{animation:pop .3s ease}
+@keyframes pop{0%{transform:scale(.96)}100%{transform:scale(1)}}
 .switch-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line);font-size:14px;font-weight:600}
 /* bottom nav */
 #bottom-nav{
