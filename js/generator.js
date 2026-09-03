@@ -125,7 +125,8 @@ function buildTurns(template, location, level, problem){
 }
 
 function getPurposeCats(){
-  const p = (state.purpose && PURPOSES.find(x=>x.id===state.purpose));
+  if(typeof PURPOSES==='undefined' || !state.purpose) return null;
+  const p = PURPOSES.find(x=>x.id===state.purpose);
   return p && p.cats ? p.cats : null;
 }
 function generateScenario(opts={}){

@@ -3,139 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#6c5cff">
-<title>RealLife English — Practice in Real Situations</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0f172a">
+<title>English Practice — Real Conversations</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="app">
-  <!-- TOP BAR -->
-  <header id="topbar">
-    <div class="logo">◐ RealLife</div>
-    <button id="btn-level-badge" class="level-badge">B1</button>
-  </header>
-
-  <!-- VIEWS -->
   <main id="views">
     <!-- HOME -->
     <section class="view active" data-view="home">
-      <div class="hero">
-        <p class="eyebrow">Learn by doing</p>
-        <h1>Practice English<br>in Real Life</h1>
-        <p class="subtitle">Speak. Make mistakes. Learn. Try again.</p>
-        <button class="btn primary large" id="btn-start-practice">Start Practice →</button>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-          <button class="btn" id="btn-infinite" style="background:#0f172a;color:#fff">∞ Infinite Practice</button>
-          <button class="btn ghost" id="btn-surprise">🎲 Surprise Me</button>
-        </div>
-        <div class="hero-stats">
-          <span><b id="stat-streak">0</b> day streak</span>
-          <span class="dot">·</span>
-          <span><b id="stat-completed">0</b> scenarios</span>
-        </div>
-      </div>
-      <div id="daily-card" class="daily-card" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:16px;padding:14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px">
-        <div><b>🔥 Daily Challenge</b><br><small id="daily-title" style="opacity:.9">Loading...</small></div>
-        <span style="background:#fff;color:#ef4444;border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px">+50 XP</span>
-      </div>
+      <div class="home-inner">
+        <h1>English Practice</h1>
+        <p class="subtitle">Practice real conversations with AI.</p>
 
-      <div id="continue-card" class="continue-card hidden">
-        <div class="continue-head">
-          <span>↻ Continue Practice</span>
-          <span class="continue-sub" id="continue-name"></span>
+        <div class="field">
+          <label>Level</label>
+          <div id="home-levels" class="pill-row"></div>
         </div>
-        <button class="btn small" id="btn-continue">Continue →</button>
-      </div>
 
-      <div class="section-head">
-        <h2>Choose a situation</h2>
-        <button class="link" data-nav="practice">See all</button>
-      </div>
-      <div id="home-grid" class="card-grid"></div>
+        <div class="field">
+          <label>Situation</label>
+          <div id="home-cats" class="pill-row"></div>
+        </div>
 
-      <div class="section-head">
-        <h2>Free Conversation</h2>
-      </div>
-      <div class="free-teaser" id="btn-free-teaser">
-        <div class="free-icon">💬</div>
-        <div>
-          <b>Free Conversation</b>
-          <p>Talk about travel, work, food — any topic.</p>
-        </div>
-        <span class="chev">›</span>
-      </div>
-      <div class="section-head">
-        <h2>Endless Journey</h2>
-      </div>
-      <div class="free-teaser" id="btn-endless" style="border:1px dashed #6c5cff">
-        <div class="free-icon" style="background:linear-gradient(135deg,#06b6d4,#6c5cff)">🌎</div>
-        <div>
-          <b>Endless Journey</b>
-          <p>One trip, many linked situations.</p>
-        </div>
-        <span class="chev">›</span>
-      </div>
-      <div id="ai-generated" style="margin-top:16px">
-        <div class="section-head">
-          <h2>AI generated for you</h2>
-          <button class="link" id="btn-refresh-ai">↻ Refresh</button>
-        </div>
-        <div id="ai-grid" class="card-grid"></div>
+        <button class="btn primary large" id="btn-start">Start</button>
+        <button class="btn ghost large" id="btn-surprise-home" style="margin-top:10px">Surprise Me</button>
+
+        <p class="hint-text">AI will create a unique situation for your level.</p>
       </div>
     </section>
 
-    <!-- PRACTICE (all situations) -->
+    <!-- PRACTICE / SCENARIO -->
     <section class="view" data-view="practice">
-      <h2 class="page-title">Choose a situation</h2>
-      <p class="page-sub">5–10 minutes each. Real dialogues.</p>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn primary" id="btn-practice-infinite">∞ Infinite</button>
-        <button class="btn" id="btn-practice-surprise">🎲 Surprise</button>
-        <select id="category-filter" style="margin-left:auto;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:700"><option value="all">All categories</option><option>Travel</option><option>Hotels</option><option>Food</option><option>Transport</option><option>Shopping</option><option>Work</option><option>Everyday</option><option>Social</option></select>
-      </div>
-      <div id="practice-grid" class="card-grid"></div>
-      <div id="practice-ai" style="margin-top:16px">
-        <h3 style="font-size:15px;margin-bottom:8px">✨ AI Generated</h3>
-        <div id="practice-ai-grid" class="card-grid"></div>
-      </div>
-    </section>
-
-    <!-- SCENARIO -->
-    <section class="view" data-view="scenario">
-      <div id="scenario-header">
-        <button class="icon-btn" id="btn-back-scenario">‹</button>
-        <div class="scenario-meta">
-          <span id="scenario-icon"></span>
-          <div>
-            <b id="scenario-title"></b>
-            <small id="scenario-goal"></small>
-          </div>
+      <header class="practice-head">
+        <button class="icon-btn" id="btn-back-home">‹</button>
+        <div>
+          <b id="practice-category"></b>
+          <small id="practice-goal"></small>
         </div>
-        <div class="scenario-progress"><i id="scenario-progress-bar"></i></div>
-      </div>
+        <span id="practice-step" class="step"></span>
+      </header>
+
+      <div id="practice-context" class="context"></div>
 
       <div id="chat"></div>
 
-      <!-- feedback card -->
       <div id="feedback" class="feedback hidden"></div>
 
-      <!-- input area -->
       <div id="input-area">
-        <div id="hint-area" class="hint-area hidden"></div>
-        <div class="input-row">
-          <textarea id="answer-input" placeholder="Your answer..." rows="1"></textarea>
-          <button id="btn-send" class="btn primary">→</button>
-        </div>
+        <div id="hint-area" class="hint hidden"></div>
+        <label class="field-label">Your answer</label>
+        <textarea id="answer-input" placeholder="Type your answer..." rows="2"></textarea>
         <div class="input-actions">
-          <button id="btn-speak" class="chip-btn">🎤 Speak</button>
-          <button id="btn-hint" class="chip-btn">💡 Hint</button>
-          <button id="btn-skip" class="chip-btn ghost">Skip</button>
+          <button id="btn-speak" class="chip">🎤 Speak</button>
+          <button id="btn-hint" class="chip">Hint</button>
+          <button id="btn-send" class="btn primary">Send</button>
         </div>
         <div id="voice-hold" class="voice-hold hidden">
-          <button id="btn-hold" class="hold-btn">🎤 Hold to Speak</button>
-          <p class="hold-hint">Hold and speak, release to send</p>
+          <button id="btn-hold" class="hold-btn">Hold to speak</button>
           <span id="voice-text"></span>
         </div>
       </div>
@@ -143,115 +69,48 @@
 
     <!-- RESULT -->
     <section class="view" data-view="result">
-      <div class="result-head">
-        <div class="confetti">🎉</div>
-        <h2>Scenario completed!</h2>
-        <div class="score-ring"><span id="result-score">0</span><small>/100</small></div>
-      </div>
-      <div class="result-grid" id="result-breakdown"></div>
-      <div class="result-two-col">
-        <div class="result-box good" id="result-good"></div>
-        <div class="result-box work" id="result-work"></div>
-      </div>
-      <div class="result-box phrases" id="result-phrases"></div>
-      <div class="result-actions">
-        <button class="btn" id="btn-review-mistakes">Review Mistakes</button>
-        <button class="btn primary" id="btn-next-scenario">Next Scenario →</button>
-        <button class="btn ghost" id="btn-try-again">Try Again</button>
-      </div>
-    </section>
-
-    <!-- MISTAKES -->
-    <section class="view" data-view="mistakes">
-      <h2 class="page-title">Your mistakes</h2>
-      <p class="page-sub">Tap Practice to fix any mistake.</p>
-      <div id="mistakes-list"></div>
-    </section>
-
-    <!-- PROGRESS -->
-    <section class="view" data-view="progress">
-      <h2 class="page-title">My Progress</h2>
-      <div class="progress-cards">
-        <div class="p-card"><small>Current level</small><b id="p-level">B1</b></div>
-        <div class="p-card"><small>Practice time</small><b id="p-time">0h 0m</b></div>
-        <div class="p-card"><small>Scenarios</small><b id="p-scenarios">0</b></div>
-        <div class="p-card"><small>Average score</small><b id="p-avg">—</b></div>
-      </div>
-      <div class="streak-card">
-        <span>🔥 <b id="p-streak">0</b> days</span>
-        <div id="calendar" class="calendar"></div>
-      </div>
-      <div class="skills">
-        <div class="skill"><span>Speaking</span><div class="bar"><i id="bar-speaking" style="width:0%"></i></div><b id="val-speaking">0%</b></div>
-        <div class="skill"><span>Grammar</span><div class="bar"><i id="bar-grammar" style="width:0%"></i></div><b id="val-grammar">0%</b></div>
-        <div class="skill"><span>Vocabulary</span><div class="bar"><i id="bar-vocab" style="width:0%"></i></div><b id="val-vocab">0%</b></div>
-      </div>
-      <h3>Achievements</h3>
-      <div id="achievements" class="achievements"></div>
-      <div id="fix-card" class="fix-card hidden"></div>
-    </section>
-
-    <!-- FREE CONVERSATION -->
-    <section class="view" data-view="free">
-      <h2 class="page-title">Free Conversation</h2>
-      <p class="page-sub">Pick a topic and just talk.</p>
-      <div id="topic-grid" class="card-grid"></div>
-      <div id="free-chat" class="hidden">
-        <div id="free-messages"></div>
-        <div class="input-row">
-          <textarea id="free-input" placeholder="Your answer..." rows="1"></textarea>
-          <button id="free-send" class="btn primary">→</button>
-        </div>
-        <div class="input-actions">
-          <button id="free-speak" class="chip-btn">🎤 Speak</button>
-          <button id="free-end" class="chip-btn ghost">End conversation</button>
+      <div class="result-inner">
+        <h2>Scenario Complete</h2>
+        <div class="score-big"><span id="result-score">0%</span></div>
+        <div id="result-breakdown" class="breakdown"></div>
+        <div id="result-main" class="result-main"></div>
+        <div class="result-actions">
+          <button class="btn primary" id="btn-try-again">Try Again</button>
+          <button class="btn" id="btn-new-situation">New Situation</button>
+          <button class="btn ghost" id="btn-go-history">History</button>
         </div>
       </div>
-      <div id="free-result" class="hidden"></div>
     </section>
 
-    <!-- PROFILE / SETTINGS -->
-    <section class="view" data-view="profile">
-      <h2 class="page-title">Profile</h2>
+    <!-- HISTORY -->
+    <section class="view" data-view="history">
+      <h2 class="page-title">History</h2>
+      <p class="page-sub">Your past situations and real mistakes.</p>
+      <div id="history-errors" class="history-block"></div>
+      <div id="history-list" class="history-list"></div>
+      <p id="history-empty" class="muted" style="text-align:center;padding:24px;display:none">No history yet. Start a situation.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" data-view="settings">
+      <h2 class="page-title">Settings</h2>
       <div class="settings-card">
-        <h3>What do you need English for?</h3>
-        <div id="profile-purpose" class="purpose-grid"></div>
-        <h3>Level</h3>
-        <div id="profile-levels" class="level-row"></div>
-        <h3>Preferences</h3>
+        <div class="field">
+          <label>Level</label>
+          <div id="settings-levels" class="pill-row"></div>
+        </div>
         <label class="switch-row">Sound <input type="checkbox" id="tg-sound" checked></label>
-        <label class="switch-row">Vibration <input type="checkbox" id="tg-vibe" checked></label>
-        <button class="btn danger wide" id="btn-reset">Reset progress</button>
+        <button class="btn danger wide" id="btn-reset" style="margin-top:16px">Reset history</button>
       </div>
+      <p class="muted" style="margin-top:16px;font-size:12px">All data is stored locally. No server.</p>
     </section>
-
-<!-- PURPOSE MODAL (first run) -->
-<div id="purpose-modal" class="overlay hidden">
-  <div class="dialog">
-    <h3>What do you need English for?</h3>
-    <p class="muted">We'll personalize your practice.</p>
-    <div id="purpose-options" class="level-options"></div>
-    <button class="btn ghost wide" id="btn-skip-purpose" style="margin-top:10px">Skip</button>
-  </div>
-</div>
   </main>
 
-  <!-- BOTTOM NAV -->
   <nav id="bottom-nav">
-    <button data-nav="home" class="nav-btn active"><span>⌂</span>Home</button>
-    <button data-nav="practice" class="nav-btn"><span>◧</span>Practice</button>
-    <button data-nav="progress" class="nav-btn"><span>◐</span>Progress</button>
-    <button data-nav="profile" class="nav-btn"><span>◯</span>Profile</button>
+    <button data-nav="home" class="nav-btn active">Home</button>
+    <button data-nav="history" class="nav-btn">History</button>
+    <button data-nav="settings" class="nav-btn">Settings</button>
   </nav>
-</div>
-
-<!-- LEVEL MODAL -->
-<div id="level-modal" class="overlay hidden">
-  <div class="dialog">
-    <h3>Choose your level</h3>
-    <p class="muted">You can change it anytime in Profile.</p>
-    <div id="level-options" class="level-options"></div>
-  </div>
 </div>
 
 <script src="js/data.js"></script>
