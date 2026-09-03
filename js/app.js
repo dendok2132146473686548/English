@@ -61,12 +61,12 @@ function bindEvents(){
   });
   document.getElementById('btn-start-practice').addEventListener('click',()=> showView('practice'));
   document.getElementById('btn-free-teaser').addEventListener('click',()=> showView('free'));
-  const bi=document.getElementById('btn-infinite'); if(bi) bi.addEventListener('click',()=> handleInfinite());
-  const bs=document.getElementById('btn-surprise'); if(bs) bs.addEventListener('click', handleSurprise);
-  const be=document.getElementById('btn-endless'); if(be) be.addEventListener('click', startEndlessJourney);
-  const ra=document.getElementById('btn-refresh-ai'); if(ra) ra.addEventListener('click', refreshAiGrid);
-  const dc=document.getElementById('daily-card'); if(dc) dc.addEventListener('click', ()=>{ const sc=getDailyChallenge(); SCENARIOS[sc.id]=sc; startScenario(sc.id); });
-  const bpi=document.getElementById('btn-practice-infinite'); if(bpi) bpi.addEventListener('click',()=> handleInfinite(document.getElementById('category-filter').value));
+  const bi=document.getElementById('btn-infinite'); if(bi) bi.addEventListener('click',()=> { try{ handleInfinite(); }catch(e){ alert('Infinite error: '+e.message); console.error(e);} });
+  const bs=document.getElementById('btn-surprise'); if(bs) bs.addEventListener('click', ()=>{ try{ handleSurprise(); }catch(e){ alert(e.message); }});
+  const be=document.getElementById('btn-endless'); if(be) be.addEventListener('click', ()=>{ try{ startEndlessJourney(); }catch(e){ alert(e.message); }});
+  const ra=document.getElementById('btn-refresh-ai'); if(ra) ra.addEventListener('click', ()=>{ try{ refreshAiGrid(); }catch(e){ alert(e.message); }});
+  const dc=document.getElementById('daily-card'); if(dc) dc.addEventListener('click', ()=>{ try{ const sc=getDailyChallenge(); SCENARIOS[sc.id]=sc; startScenario(sc.id); }catch(e){ alert(e.message); }});
+  const bpi=document.getElementById('btn-practice-infinite'); if(bpi) bpi.addEventListener('click',()=> { try{ handleInfinite(document.getElementById('category-filter').value); }catch(e){ alert(e.message); }});
   const bps=document.getElementById('btn-practice-surprise'); if(bps) bps.addEventListener('click', handleSurprise);
   const cf=document.getElementById('category-filter'); if(cf) cf.addEventListener('change', renderPractice);
   document.getElementById('btn-level-badge').addEventListener('click', openLevelModal);
@@ -226,21 +226,22 @@ function refreshAiGrid(){
 
 function handleInfinite(category){
   let cat = category && category!=='all' ? category : null;
-  // personalize: if user has purpose, bias
   const sc=generateScenario({category:cat});
   SCENARIOS[sc.id]=sc;
+  aiCache.unshift(sc); if(aiCache.length>6) aiCache=aiCache.slice(0,6);
   startScenario(sc.id);
 }
 function handleSurprise(){
   const sc=generateScenario();
   SCENARIOS[sc.id]=sc;
+  aiCache.unshift(sc); if(aiCache.length>6) aiCache=aiCache.slice(0,6);
+  const t=document.createElement('div'); t.textContent='🎲 '+sc.title; t.style.cssText='position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;z-index:99'; document.body.appendChild(t); setTimeout(()=>t.remove(),1800);
   startScenario(sc.id);
 }
 function startEndlessJourney(){
   const chain=generateChain(5);
   endlessChain=chain.scenarios;
   endlessIndex=0;
-  // add all to SCENARIOS
   endlessChain.forEach(sc=> SCENARIOS[sc.id]=sc);
   alert(`🌎 Endless Journey: Trip to ${chain.location} — ${chain.scenarios.length} linked scenarios. Your story begins now!`);
   startScenario(endlessChain[0].id);
@@ -289,7 +290,11 @@ function showPurposeModal(){
     state.purpose=o.dataset.id; saveState(); renderPurpose();
     m.classList.add('hidden');
   }));
-  document.getElementById('btn-skip-purpose').addEventListener('click',()=> m.classList.add('hidden'), {once:true});
+  const skip=document.getElementById('btn-skip-purpose');
+  if(skip) skip.addEventListener('click',()=>{
+    if(!state.purpose){ state.purpose='general'; saveState(); renderPurpose(); }
+    m.classList.add('hidden');
+  }, {once:true});
   m.addEventListener('click', e=>{ if(e.target.id==='purpose-modal') m.classList.add('hidden'); });
   m.classList.remove('hidden');
 }
