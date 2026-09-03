@@ -10,53 +10,64 @@
 </head>
 <body>
 <div id="app">
+  <header id="topbar">
+    <div class="logo">English Practice</div>
+    <button id="btn-level-badge" class="level-badge">B1</button>
+  </header>
+
   <main id="views">
     <!-- HOME -->
     <section class="view active" data-view="home">
-      <div class="home-inner">
-        <h1>English Practice</h1>
-        <p class="subtitle">Practice real conversations with AI.</p>
-
-        <div class="field">
-          <label>Level</label>
-          <div id="home-levels" class="pill-row"></div>
-        </div>
-
-        <div class="field">
-          <label>Situation</label>
-          <div id="home-cats" class="pill-row"></div>
-        </div>
-
-        <button class="btn primary large" id="btn-start">Start</button>
-        <button class="btn ghost large" id="btn-surprise-home" style="margin-top:10px">Surprise Me</button>
-
-        <p class="hint-text">AI will create a unique situation for your level.</p>
+      <div class="home-hero">
+        <h1>Practice real English<br>in real situations.</h1>
+        <p class="subtitle">AI creates a situation — you respond — AI checks your English.</p>
       </div>
+
+      <div class="card soft" id="card-level">
+        <div class="card-label">Your level</div>
+        <div class="card-value" id="home-level-value">B1 — Intermediate</div>
+        <span class="card-action">Change ›</span>
+      </div>
+
+      <div class="card soft" id="card-today">
+        <div class="card-label">Today's practice</div>
+        <div class="today-pills" id="today-pills">
+          <span>✈️ Airport</span><span>🏨 Hotel</span><span>🍽️ Restaurant</span>
+        </div>
+      </div>
+
+      <button class="btn primary large" id="btn-start-ai">Start AI Situation</button>
+
+      <div class="section-head">
+        <h2>Categories</h2>
+      </div>
+      <div id="home-cats" class="cat-grid"></div>
+
+      <button class="btn ghost large" id="btn-surprise-home" style="margin-top:12px">✨ Surprise Me</button>
     </section>
 
-    <!-- PRACTICE / SCENARIO -->
+    <!-- PRACTICE -->
     <section class="view" data-view="practice">
       <header class="practice-head">
-        <button class="icon-btn" id="btn-back-home">‹</button>
-        <div>
-          <b id="practice-category"></b>
-          <small id="practice-goal"></small>
+        <button class="icon-btn" id="btn-back-home" aria-label="Back">‹</button>
+        <div class="practice-title">
+          <b id="practice-category">Airport</b>
+          <small id="practice-meta">B1 · Travel</small>
         </div>
-        <span id="practice-step" class="step"></span>
+        <span id="practice-step" class="step">1 / 4</span>
       </header>
-
+      <div class="progress-track"><i id="practice-progress"></i></div>
       <div id="practice-context" class="context"></div>
-
       <div id="chat"></div>
-
       <div id="feedback" class="feedback hidden"></div>
-
       <div id="input-area">
         <div id="hint-area" class="hint hidden"></div>
         <label class="field-label">Your answer</label>
-        <textarea id="answer-input" placeholder="Type your answer..." rows="2"></textarea>
+        <div class="input-row">
+          <textarea id="answer-input" placeholder="Your answer..." rows="2"></textarea>
+          <button id="btn-mic" class="mic-btn" aria-label="Microphone">🎤</button>
+        </div>
         <div class="input-actions">
-          <button id="btn-speak" class="chip">🎤 Speak</button>
           <button id="btn-hint" class="chip">Hint</button>
           <button id="btn-send" class="btn primary">Send</button>
         </div>
@@ -64,14 +75,58 @@
           <button id="btn-hold" class="hold-btn">Hold to speak</button>
           <span id="voice-text"></span>
         </div>
+        <p id="mic-status" class="mic-status hidden"></p>
       </div>
     </section>
 
-    <!-- RESULT -->
+    <!-- PROGRESS -->
+    <section class="view" data-view="progress">
+      <h2 class="page-title">Progress</h2>
+      <div class="stats-grid">
+        <div class="stat-card"><small>English Level</small><b id="p-level">B1</b></div>
+        <div class="stat-card"><small>Average Score</small><b id="p-avg">—</b></div>
+        <div class="stat-card"><small>Situations</small><b id="p-count">0</b></div>
+        <div class="stat-card"><small>Main Weakness</small><b id="p-weak">—</b></div>
+      </div>
+      <div class="card soft" style="margin-top:12px">
+        <div class="card-label">Recent mistakes</div>
+        <div id="progress-mistakes"></div>
+        <button class="link" id="btn-view-history" style="margin-top:8px">View all history →</button>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="view" data-view="history">
+      <h2 class="page-title">History</h2>
+      <p class="page-sub">Past situations and real mistakes.</p>
+      <div id="history-agg" class="history-block"></div>
+      <div id="history-list" class="history-list"></div>
+      <p id="history-empty" class="muted hidden" style="text-align:center;padding:24px">No history yet. Start a situation.</p>
+    </section>
+
+    <!-- PROFILE -->
+    <section class="view" data-view="profile">
+      <h2 class="page-title">Profile</h2>
+      <div class="settings-card">
+        <div class="field">
+          <label>English level</label>
+          <div id="profile-levels" class="pill-row"></div>
+        </div>
+        <div class="field">
+          <label>Practice preferences</label>
+          <div id="pref-cats" class="pill-row"></div>
+        </div>
+        <label class="switch-row">Voice <span class="switch"><input type="checkbox" id="tg-voice" checked><i></i></span></label>
+        <label class="switch-row">Feedback detail <span class="segmented"><button data-detail="short" class="seg active">Short</button><button data-detail="detailed" class="seg">Detailed</button></span></label>
+        <button class="btn danger wide" id="btn-reset" style="margin-top:16px">Reset history</button>
+      </div>
+    </section>
+
+    <!-- RESULT (overlay within practice flow) -->
     <section class="view" data-view="result">
       <div class="result-inner">
         <h2>Scenario Complete</h2>
-        <div class="score-big"><span id="result-score">0%</span></div>
+        <div class="score-big" id="result-score">0%</div>
         <div id="result-breakdown" class="breakdown"></div>
         <div id="result-main" class="result-main"></div>
         <div class="result-actions">
@@ -81,36 +136,23 @@
         </div>
       </div>
     </section>
-
-    <!-- HISTORY -->
-    <section class="view" data-view="history">
-      <h2 class="page-title">History</h2>
-      <p class="page-sub">Your past situations and real mistakes.</p>
-      <div id="history-errors" class="history-block"></div>
-      <div id="history-list" class="history-list"></div>
-      <p id="history-empty" class="muted" style="text-align:center;padding:24px;display:none">No history yet. Start a situation.</p>
-    </section>
-
-    <!-- SETTINGS -->
-    <section class="view" data-view="settings">
-      <h2 class="page-title">Settings</h2>
-      <div class="settings-card">
-        <div class="field">
-          <label>Level</label>
-          <div id="settings-levels" class="pill-row"></div>
-        </div>
-        <label class="switch-row">Sound <input type="checkbox" id="tg-sound" checked></label>
-        <button class="btn danger wide" id="btn-reset" style="margin-top:16px">Reset history</button>
-      </div>
-      <p class="muted" style="margin-top:16px;font-size:12px">All data is stored locally. No server.</p>
-    </section>
   </main>
 
   <nav id="bottom-nav">
-    <button data-nav="home" class="nav-btn active">Home</button>
-    <button data-nav="history" class="nav-btn">History</button>
-    <button data-nav="settings" class="nav-btn">Settings</button>
+    <button data-nav="home" class="nav-btn active"><span>⌂</span>Home</button>
+    <button data-nav="practice" class="nav-btn"><span>◧</span>Practice</button>
+    <button data-nav="progress" class="nav-btn"><span>◐</span>Progress</button>
+    <button data-nav="profile" class="nav-btn"><span>◯</span>Profile</button>
   </nav>
+</div>
+
+<!-- LEVEL MODAL -->
+<div id="level-modal" class="overlay hidden">
+  <div class="dialog">
+    <h3>Choose your level</h3>
+    <p class="muted">You can change it anytime.</p>
+    <div id="level-options" class="level-options"></div>
+  </div>
 </div>
 
 <script src="js/data.js"></script>
