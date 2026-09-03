@@ -209,7 +209,7 @@ function handleSend(){
   input.disabled=true;
   pushUser(raw);
   setTimeout(()=>{
-    const res=analyzeAnswer(raw, turn, state.level);
+    const res=analyzeAnswer(raw, turn, state.level, currentScenario);
     if(hintLevel>0) res.score=Math.max(0,res.score - hintLevel*4);
     turnScores.push(res.score);
     if(res.errors.length){
