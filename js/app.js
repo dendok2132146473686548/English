@@ -277,10 +277,17 @@ function handleHint(){
   const turn=currentScenario.turns[turnIndex];
   const area=document.getElementById('hint-area');
   area.classList.remove('hidden');
-  if(hintLevel===0) area.textContent = turn.hint;
-  else if(hintLevel===1) area.innerHTML = `<b>Useful words:</b> ${turn.useful.join(', ')}`;
-  else area.textContent = `Try: "${turn.example}" — say it in your own words.`;
-  hintLevel=Math.min(2, hintLevel+1);
+  if(hintLevel===0){
+    area.innerHTML = `<b>Hint:</b> ${turn.hint}`;
+  } else {
+    const vocab = (typeof getVocabHints==='function') ? getVocabHints(turn, state.level) : null;
+    if(vocab && vocab.length){
+      area.innerHTML = vocab.map(v=> `<b>${v.en}</b>${v.ru?' — '+v.ru:''}`).join('<br>');
+    } else {
+      area.innerHTML = `<b>Useful words:</b> ${turn.useful.slice(0,4).join(', ')}`;
+    }
+  }
+  hintLevel=Math.min(1, hintLevel+1);
 }
 
 function finishScenario(){

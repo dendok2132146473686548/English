@@ -1,6 +1,4 @@
-// Infinite Scenario Generator — §14 combinatorial system
-// Situation + Location + Character + Goal + Problem + Random Event + Level + Mistakes
-
+// Infinite Scenario Generator — Context Lock + Strict Validation
 const LOCATIONS = ["London","New York","Tokyo","Paris","Berlin","Barcelona","Dubai","Sydney","Rome","Amsterdam","Prague","Bangkok"];
 const CATEGORIES = {
   Travel: [
@@ -58,23 +56,56 @@ const CATEGORIES = {
 };
 
 const CHARACTERS = {
-  Travel:{name:'Agent', role:'Airline Agent', avatar:'👩‍💼'},
-  Hotels:{name:'Receptionist', role:'Hotel Receptionist', avatar:'👨‍💼'},
-  Food:{name:'Waiter', role:'Waiter', avatar:'🤵'},
-  Transport:{name:'Driver', role:'Driver', avatar:'👨‍✈️'},
-  Shopping:{name:'Assistant', role:'Shop Assistant', avatar:'👩‍💼'},
-  Work:{name:'Manager', role:'Manager', avatar:'👩‍💼'},
-  Everyday:{name:'Doctor', role:'Doctor', avatar:'👨‍⚕️'},
-  Social:{name:'Alex', role:'New Friend', avatar:'😊'},
+  Travel:{name:'Agent', role:'Airline Agent'},
+  Hotels:{name:'Receptionist', role:'Hotel Receptionist'},
+  Food:{name:'Waiter', role:'Waiter'},
+  Transport:{name:'Driver', role:'Driver'},
+  Shopping:{name:'Assistant', role:'Shop Assistant'},
+  Work:{name:'Manager', role:'Manager'},
+  Everyday:{name:'Doctor', role:'Doctor'},
+  Social:{name:'Alex', role:'New Friend'},
 };
 
-const RANDOM_EVENTS = [
-  "I'm sorry, but there is a problem with your request.",
-  "By the way, we have a special offer today.",
-  "Could you please wait a moment? I need to check something.",
-  "Oh, I need to ask you one more thing.",
-  "Just to confirm — could you spell that for me?"
-];
+const RANDOM_EVENTS = {
+  Travel: ["Your flight time has changed. Please confirm new time.", "There's an issue with your boarding pass."],
+  Hotels: ["Your room has an issue we need to inform you about.", "Would you like an upgrade for 20 euros?"],
+  Food: ["We're out of that dish today.", "Would you like dessert?"],
+  Transport: ["There's heavy traffic, it may take longer.", "The meter is broken, we need to agree on price."],
+  Shopping: ["This item is on sale today.", "We have only one left in stock."],
+  Work: ["The client has an urgent question.", "Can you elaborate on that point?"],
+  Everyday: ["The doctor is running 15 minutes late.", "Do you have insurance?"],
+  Social: ["By the way, what do you do for fun?", "I need to go soon, one last thing..."]
+};
+
+const CATEGORY_KEYWORDS = {
+  Travel:['flight','luggage','bag','passport','gate','airport','boarding','check-in','delay','cancelled'],
+  Hotels:['room','reservation','hotel','reception','breakfast','checkout','key','night','stay'],
+  Food:['order','menu','dish','restaurant','bill','drink','allergy','table'],
+  Transport:['taxi','driver','station','ticket','train','car','address','price'],
+  Shopping:['size','return','discount','shop','price','item','pharmacy','medicine'],
+  Work:['job','interview','meeting','project','manager','work','colleague'],
+  Everyday:['doctor','appointment','landlord','bank','haircut','sore','throat'],
+  Social:['party','weekend','invite','apologize','small talk','date']
+};
+
+const VOCAB_DICT = {
+  'reservation':{en:'reservation', ru:'бронирование', level:'A2'},
+  'available':{en:'available', ru:'доступный', level:'B1'},
+  'availability':{en:'availability', ru:'наличие', level:'B2'},
+  'cancelled':{en:'cancelled', ru:'отменён', level:'A2'},
+  'options':{en:'options', ru:'варианты', level:'A2'},
+  'reschedule':{en:'reschedule', ru:'перенести', level:'B1'},
+  'delay':{en:'delay', ru:'задержка', level:'A2'},
+  'luggage':{en:'luggage', ru:'багаж', level:'A2'},
+  'receipt':{en:'receipt', ru:'квитанция', level:'B1'},
+  'overweight':{en:'overweight', ru:'перевес', level:'B1'},
+  'gate':{en:'gate', ru:'выход на посадку', level:'A2'},
+  'rebook':{en:'rebook', ru:'перебронировать', level:'B1'},
+  'refund':{en:'refund', ru:'возврат денег', level:'B1'},
+  'check-in':{en:'check-in', ru:'регистрация', level:'A2'},
+  'allergy':{en:'allergy', ru:'аллергия', level:'B1'},
+  'prescription':{en:'prescription', ru:'рецепт', level:'B2'},
+};
 
 function pick(arr, rng=Math.random){ return arr[Math.floor(rng()*arr.length)]; }
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31 + s.charCodeAt(i))>>>0; return h; }
@@ -86,42 +117,152 @@ function getWeakGrammarFocus(){
     const t=(m.correction||'').toLowerCase();
     if(/want to/.test(t)) counts['want_to']=(counts['want_to']||0)+1;
     if(/\b(a|an|the)\b/.test(t)) counts['articles']=(counts['articles']||0)+1;
-    if(/have booked|has gone/.test(t)) counts['past']=(counts['past']||0)+1;
+    if(/have booked|has gone|went|was/.test(t)) counts['past']=(counts['past']||0)+1;
   });
   let top=null, mx=0; Object.entries(counts).forEach(([k,v])=>{ if(v>mx){mx=v; top=k;}});
   return top;
 }
 
-function buildTurns(template, location, level, problem){
-  const weak = getWeakGrammarFocus();
-  // Base 4 turns, inject weak grammar focus if needed
-  const base = [
-    { agent: level==='A1' ? `Hello. ${problem}.` : `Good ${new Date().getHours()<12?'morning':'evening'}. ${problem} in ${location}. How can I help you?`,
-      hint:`Explain your situation in ${location}.`, useful:["help","problem","please"], example:"I have a problem with my reservation.", keywords:["problem","help","reservation"], correct:"I have a problem with my reservation.", natural:"I have an issue with my reservation.", phrases:["I have a problem"] },
-    { agent: pick(["Could you give me more details, please?","Can you tell me more?","What exactly happened?"]),
-      hint:"Give details clearly.", useful:["yesterday","booked","room"], example:"I booked a room for two nights.", keywords:["booked","room","night"], correct:"I booked a room for two nights.", natural:"I booked a room for two nights.", phrases:["I booked..."] },
-    { agent: "I understand. Let me check what I can do for you.",
-      hint:"Ask what can be done.", useful:["what can you do","possible","help"], example:"What can you do for me?", keywords:["what","can","do"], correct:"What can you do for me?", natural:"Is there anything you can do?", phrases:["What can you do?"] },
-    { agent: "Thank you for your patience. Is there anything else I can help you with?",
-      hint:"Thank and close politely.", useful:["thank you","thanks","no"], example:"No, thank you so much!", keywords:["thank"], correct:"No, thank you!", natural:"No, thank you so much!", phrases:["Thank you"] },
-  ];
-  // Inject weak grammar practice: if weak is want_to, make turn 2 require "want to"
+function getVocabForTurn(turn, level){
+  // turn.useful contains english words, map to dict and filter by level and history
+  const known = new Set((state.mistakes||[]).filter(m=>m.type==='Lexical').map(m=>m.original.toLowerCase()));
+  // Actually known words are those user has used correctly many times? Simplify: if word appears in mistakes as correction, it's weak, so prioritize
+  // For now, filter: don't show words user has already mastered (appears in completed with high score?) — simplified: show all
+  const levelOrder={A1:1,A2:2,B1:3,B2:4,C1:5};
+  const lvlNum=levelOrder[level]||3;
+  let words = turn.useful.slice(0,4).map(w=>{
+    const key=w.toLowerCase();
+    const entry=VOCAB_DICT[key] || {en:w, ru:'', level:'A2'};
+    return entry;
+  });
+  // Filter by level: A1/A2 show all, B1 show B1+, B2/C1 show B2+
+  words = words.filter(e=>{
+    const wLvl=levelOrder[e.level]||2;
+    if(lvlNum<=2) return true;
+    if(lvlNum===3) return wLvl>=2;
+    return wLvl>=3;
+  });
+  // Prioritize weak words
+  const weak=getWeakGrammarFocus();
   if(weak==='want_to'){
-    base[1].hint = "Use 'want to + verb' (I want to change my room).";
+    // ensure want_to related vocab shown
+  }
+  // Limit 2-4
+  return words.slice(0,4);
+}
+
+function isRelevant(message, category){
+  const kws=CATEGORY_KEYWORDS[category]||[];
+  const lower=message.toLowerCase();
+  let score=0;
+  kws.forEach(k=>{ if(lower.includes(k)) score++; });
+  // Also check that message does NOT contain keywords from other categories strongly
+  let otherScore=0;
+  Object.keys(CATEGORY_KEYWORDS).forEach(cat=>{
+    if(cat===category) return;
+    CATEGORY_KEYWORDS[cat].forEach(k=>{ if(lower.includes(k)) otherScore++; });
+  });
+  // relevance 0-100
+  const relevance = kws.length ? Math.round((score / Math.max(1,kws.length*0.4))*100) : 50;
+  // penalize if other category keywords dominate
+  if(otherScore > score && score<2) return 20;
+  return Math.min(100, relevance);
+}
+
+function buildTurns(template, location, level, problem){
+  const category = Object.keys(CATEGORIES).find(cat=> CATEGORIES[cat].some(t=>t.id===template.id)) || 'Travel';
+  const weak = getWeakGrammarFocus();
+
+  // Template-specific turns
+  const specific = {
+    'airport-lost': [
+      { agent:`Your luggage is missing in ${location}. Could you describe your bag?`, hint:"Describe your bag (color, size).", useful:["suitcase","black","large","receipt"], example:"It's a large black suitcase.", keywords:["suitcase","black","large","bag"], correct:"It's a large black suitcase.", phrases:[] },
+      { agent:"Do you have your baggage receipt?", hint:"Say you have it or not.", useful:["receipt","here","yes"], example:"Yes, here it is.", keywords:["receipt","here","yes"], correct:"Yes, here it is.", phrases:[] },
+      { agent:"Thank you. We'll try to locate it. Where are you staying in "+location+"?", hint:"Say your hotel.", useful:["hotel","stay","address"], example:"At the Central Hotel.", keywords:["hotel","central"], correct:"At the Central Hotel.", phrases:[] },
+    ],
+    'airport-delay': [
+      { agent:`Your flight in ${location} is delayed. Would you like to rebook?`, hint:"Ask about options.", useful:["rebook","options","cancelled"], example:"Can I rebook for tomorrow?", keywords:["rebook","options"], correct:"Can I rebook for tomorrow?", phrases:[] },
+      { agent:"We can rebook you for tomorrow 9 a.m. or give a refund. What do you prefer?", hint:"Choose rebook or refund.", useful:["rebook","refund","prefer"], example:"I'd like to rebook.", keywords:["rebook","refund"], correct:"I'd like to rebook.", phrases:[] },
+    ],
+    'hotel-noready': [
+      { agent:`Your room in ${location} is not ready yet. How would you like to proceed?`, hint:"Ask when it will be ready.", useful:["ready","when","available"], example:"When will it be ready?", keywords:["ready","when","available"], correct:"When will it be ready?", phrases:[] },
+      { agent:"It will be ready in 30 minutes. Would you like to leave your luggage here?", hint:"Say yes or no.", useful:["luggage","leave","yes"], example:"Yes, please.", keywords:["luggage","yes"], correct:"Yes, please.", phrases:[] },
+    ],
+  };
+
+  let base = specific[template.id];
+  if(!base){
+    // Generic but context-locked fallback using template problem
+    base = [
+      { agent: level==='A1' ? `Hello. ${problem}.` : `Good ${new Date().getHours()<12?'morning':'evening'}. ${problem} in ${location}. How can I help you?`,
+        hint:`Explain your situation in ${location}.`, useful:["help","problem","please"], example:"I have a problem.", keywords:["problem","help"], correct:"I have a problem.", phrases:[] },
+      { agent: "Could you give me more details, please?", hint:"Give details.", useful:["booked","room","night"], example:"I booked a room.", keywords:["booked","room"], correct:"I booked a room.", phrases:[] },
+      { agent: "I understand. What would you like me to do?", hint:"Ask what can be done.", useful:["what can you do","possible"], example:"What can you do?", keywords:["what","can","do"], correct:"What can you do?", phrases:[] },
+    ];
+  }
+
+  // Weak grammar injection
+  if(weak==='want_to' && base[1]){
+    base[1].hint = "Use 'want to + verb' (I want to change my booking).";
     base[1].useful = ["want to","change","book"];
-    base[1].example = "I want to change my room.";
+    base[1].example = "I want to change my booking.";
     base[1].keywords = ["want","to"];
   }
-  // Level adaptation: A1 shorter
+
+  // Level adaptation
   if(level==='A1'){
     base.forEach(t=>{ t.agent = t.agent.split('.')[0]+'.'; });
   }
-  // Random event injection 40%
-  if(Math.random()<0.4){
-    const ev = pick(RANDOM_EVENTS);
-    base.splice(2,0,{ agent: ev, hint:"Respond to the unexpected question.", useful:["sorry","please","help"], example:"Sure, no problem.", keywords:["sure","okay","yes"], correct:"Sure, no problem.", natural:"Of course.", phrases:["Sure"] });
+
+  // Add closing turn if not present
+  if(!base.some(t=>/thank/i.test(t.agent))){
+    base.push({ agent:"Thank you for your patience. Is there anything else?", hint:"Thank and close.", useful:["thank you","no"], example:"No, thank you!", keywords:["thank"], correct:"No, thank you!", phrases:[] });
   }
+
+  // Random event injection — only from same category
+  if(Math.random()<0.35){
+    const evs=RANDOM_EVENTS[category] || RANDOM_EVENTS.Travel;
+    const ev=pick(evs);
+    // Validate relevance
+    if(isRelevant(ev, category) > 40){
+      base.splice(2,0,{ agent: ev, hint:"Respond to the question.", useful:["sure","okay","yes"], example:"Sure.", keywords:["sure","okay"], correct:"Sure.", phrases:[] });
+    }
+  }
+
+  // Final validation: ensure all agent messages are relevant
+  base = base.filter(t=> isRelevant(t.agent, category) >= 30);
+  if(base.length<2){
+    // Fallback to ensure at least 2 turns
+    base = specific[template.id] || base;
+  }
+
   return base;
+}
+
+function getVocabHints(turn, level){
+  const levelOrder={A1:1,A2:2,B1:3,B2:4,C1:5};
+  const lvlNum=levelOrder[level]||3;
+  // turn.useful contains english words/phrases
+  let words = turn.useful.slice(0,4).map(w=>{
+    const key=w.toLowerCase();
+    const entry=VOCAB_DICT[key] || {en:w, ru:'', level:'A2'};
+    return entry;
+  });
+  // Filter by level
+  words = words.filter(e=>{
+    const wLvl=levelOrder[e.level]||2;
+    if(lvlNum<=2) return true;
+    if(lvlNum===3) return wLvl>=2;
+    return wLvl>=3;
+  });
+  // Don't show words user already knows well (appears in history as correct many times)
+  const known = new Set();
+  // If word appears in mistakes as correction, it's weak, keep it; if not in mistakes at all, it's unknown, keep
+  // For now, don't filter known, just prioritize weak
+  // Limit 2-4
+  if(words.length>4) words=words.slice(0,4);
+  if(words.length<2 && turn.useful.length>=2) words=turn.useful.slice(0,2).map(w=> VOCAB_DICT[w.toLowerCase()] || {en:w, ru:'', level:'A2'});
+  return words.slice(0,4);
 }
 
 function getPurposeCats(){
@@ -129,9 +270,9 @@ function getPurposeCats(){
   const p = PURPOSES.find(x=>x.id===state.purpose);
   return p && p.cats ? p.cats : null;
 }
+
 function generateScenario(opts={}){
   const level = opts.level || state.level || 'B1';
-  // pick category
   let catName = opts.category;
   if(!catName || !CATEGORIES[catName]){
     const pref = getPurposeCats();
@@ -140,23 +281,44 @@ function generateScenario(opts={}){
   }
   const pool = CATEGORIES[catName];
   let tmpl = opts.template || pick(pool);
-  // avoid recent repeats
-  const recent = (state.completed||[]).slice(-10).map(c=>c.id);
+  const recent = (state.generatedHistory||[]).slice(-10).map(c=>c.templateId);
   let tries=0;
   while(recent.includes(tmpl.id) && tries<5){ tmpl = pick(pool); tries++; }
   const location = opts.location || pick(LOCATIONS);
   const problem = pick(tmpl.problems);
   const goal = pick(tmpl.goals);
-  const character = CHARACTERS[catName] || {name:'Agent', role:'Assistant', avatar:'👤'};
+  const character = CHARACTERS[catName] || {name:'Agent', role:'Assistant'};
   const turns = buildTurns(tmpl, location, level, problem);
+
+  // Context validation before return
+  const lockedContext = {
+    category:catName,
+    scenario:tmpl.title,
+    location,
+    user_role: catName==='Travel'?'Passenger': catName==='Hotels'?'Guest':'Customer',
+    ai_role: character.role,
+    goal,
+    context: `You are in ${location}. ${problem}.`,
+    constraints:[`Stay in ${catName}`, `Goal: ${goal}`]
+  };
+
+  // Validate each turn
+  let valid=true;
+  for(const t of turns){
+    if(isRelevant(t.agent, catName) < 25) valid=false;
+  }
+  if(!valid && tries<3){
+    // regenerate with different template
+    return generateScenario({...opts, template:pick(pool)});
+  }
+
   const id = 'gen-'+Date.now()+'-'+Math.floor(Math.random()*10000);
   const scenario = {
     id, icon:tmpl.icon, title:`${tmpl.title} — ${location}`, goal,
     desc:`You are in ${location}. ${problem}. Goal: ${goal}.`,
     character, turns,
-    meta:{category:catName, templateId:tmpl.id, location, problem, level, generated:true}
+    meta:{category:catName, templateId:tmpl.id, location, problem, level, generated:true, lockedContext}
   };
-  // store history to avoid repeats
   if(!state.generatedHistory) state.generatedHistory=[];
   state.generatedHistory.push({id, templateId:tmpl.id, category:catName, location, problem, date:new Date().toISOString().slice(0,10)});
   if(state.generatedHistory.length>50) state.generatedHistory = state.generatedHistory.slice(-50);
@@ -178,7 +340,6 @@ function getDailyChallenge(){
 function generateChain(length=5){
   const chain=[];
   const loc=pick(LOCATIONS);
-  // linked story: e.g., Trip to <loc>
   for(let i=0;i<length;i++){
     const cat = Object.keys(CATEGORIES)[i % Object.keys(CATEGORIES).length];
     const sc = generateScenario({category:cat, location:loc});
