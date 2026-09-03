@@ -7,7 +7,11 @@ try{ const old=localStorage.getItem('erl_state_v1'); if(old && !localStorage.get
 
 let selectedLevel=state.level;
 let selectedCat='Travel';
-let currentScenario=null, turnIndex=0, turnScores=[], hintLevel=0, sessionErrors=[], isChecking=false;
+let currentScenario=null, turnIndex=0, turnScores=[], hintLevel=0, sessionErrors=[];
+let status='idle'; // idle | checking | success | error
+let currentRequestId=0;
+let abortController=null;
+let isChecking=false; // legacy, kept for compatibility, mirrors status==='checking'
 
 const HOME_CATS_UI=[
   {id:'Travel', icon:'✈️', label:'Travel'},
@@ -197,19 +201,50 @@ function pushUser(text){
   chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
 }
 
-function handleSend(){
-  if(isChecking) return;
+async function handleSend(){
+  if(status==='checking') return;
   const input=document.getElementById('answer-input');
   const raw=input.value.trim();
   if(!raw){ input.focus(); return; }
-  const turn=currentScenario.turns[turnIndex];
-  isChecking=true;
+  if(!currentScenario || !currentScenario.turns[turnIndex]) return;
+
+  const requestId=++currentRequestId;
+  const scenarioId=currentScenario.id;
+  const turnId=turnIndex;
+  const startedAt=Date.now();
+  status='checking'; isChecking=true;
+  abortController=new AbortController();
+
   const btn=document.getElementById('btn-send');
+  const hintBtn=document.getElementById('btn-hint');
+  const micBtn=document.getElementById('btn-mic');
   btn.textContent='Checking...'; btn.disabled=true;
   input.disabled=true;
+  if(hintBtn) hintBtn.disabled=true;
+  if(micBtn) micBtn.disabled=true;
+  showCancel(true);
   pushUser(raw);
-  setTimeout(()=>{
-    const res=analyzeAnswer(raw, turn, state.level, currentScenario);
+  logRequest({requestId, scenarioId, turnId, raw, startedAt, status:'checking'});
+
+  const timeoutMs=8000;
+  let timeoutId=null;
+  const timeoutPromise=new Promise((_,reject)=>{
+    timeoutId=setTimeout(()=> reject(new Error('timeout')), timeoutMs);
+  });
+
+  try{
+    // Step 1: Check answer with validation and max 3 attempts
+    const res=await Promise.race([
+      checkAnswerWithValidation(raw, currentScenario.turns[turnIndex], state.level, currentScenario, requestId, abortController.signal),
+      timeoutPromise
+    ]);
+    if(requestId!==currentRequestId) return; // stale
+    if(!res) throw new Error('Empty response');
+    if(!isValidFeedback(res, currentScenario)){
+      throw new Error('Invalid feedback');
+    }
+    clearTimeout(timeoutId);
+    // Step 2: Display feedback (always succeeds, separate from Step 3)
     if(hintLevel>0) res.score=Math.max(0,res.score - hintLevel*4);
     turnScores.push(res.score);
     if(res.errors.length){
@@ -218,11 +253,155 @@ function handleSend(){
       saveState();
     }
     showFeedback(res);
-    isChecking=false;
-    btn.textContent='Send';
-    input.disabled=false; input.value=''; input.focus();
-    btn.disabled=true;
-  }, 500);
+    status='success';
+    logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'success', score:res.score});
+    // Step 3: Prepare next turn (separate, errors here don't hide feedback)
+    // nextTurn is triggered by user clicking Continue, not automatically
+  }catch(err){
+    if(requestId!==currentRequestId) return;
+    clearTimeout(timeoutId);
+    const isTimeout = err && err.message==='timeout';
+    const isAbort = err && err.name==='AbortError';
+    if(isAbort){
+      status='idle';
+      logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'cancelled'});
+    } else {
+      status='error';
+      logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'error', error: err.message});
+      showError(err, isTimeout);
+    }
+  }finally{
+    if(requestId===currentRequestId){
+      clearTimeout(timeoutId);
+      abortController=null;
+      isChecking=false;
+      if(status==='checking') status='idle';
+      hideCancel();
+      btn.textContent='Send';
+      input.disabled=false;
+      input.value='';
+      // keep disabled until user types again
+      btn.disabled=true;
+      if(hintBtn) hintBtn.disabled=false;
+      if(micBtn) micBtn.disabled=false;
+      input.focus();
+    }
+  }
+}
+
+async function checkAnswerWithValidation(raw, turn, level, scenario, requestId, signal){
+  const MAX_ATTEMPTS=3;
+  let lastError=null;
+  for(let attempt=1; attempt<=MAX_ATTEMPTS; attempt++){
+    if(signal && signal.aborted) throw new DOMException('Aborted','AbortError');
+    try{
+      // Simulate async AI call (analyzeAnswer is sync, but wrap in promise)
+      const res = await new Promise((resolve, reject)=>{
+        if(signal && signal.aborted) return reject(new DOMException('Aborted','AbortError'));
+        // Small async delay to simulate AI
+        setTimeout(()=>{
+          try{
+            const r=analyzeAnswer(raw, turn, level, scenario);
+            resolve(r);
+          }catch(e){ reject(e); }
+        }, 300);
+      });
+      if(!res || typeof res.score!=='number') throw new Error('Malformed response');
+      if(!isValidFeedback(res, scenario)){
+        lastError=new Error('Context validation failed');
+        logRequest({requestId, scenarioId:scenario.id, attempt, validation:'failed'});
+        if(attempt===MAX_ATTEMPTS) throw lastError;
+        continue;
+      }
+      logRequest({requestId, scenarioId:scenario.id, attempt, validation:'passed'});
+      return res;
+    }catch(e){
+      lastError=e;
+      if(e.name==='AbortError' || e.message==='timeout') throw e;
+      if(attempt===MAX_ATTEMPTS) throw lastError;
+      // brief backoff before retry
+      await new Promise(r=> setTimeout(r, 200));
+    }
+  }
+  throw lastError || new Error('Failed after max attempts');
+}
+
+function isValidFeedback(res, scenario){
+  if(!res || !res.corrected) return false;
+  // Context relevance: corrected should not contain reservation when scenario is luggage
+  const corrLower=(res.corrected||'').toLowerCase();
+  const scenLower=(scenario.desc||'').toLowerCase();
+  const isLuggage = scenLower.includes('damaged') || scenLower.includes('luggage') || scenLower.includes('suitcase');
+  if(isLuggage && corrLower.includes('reservation') && !res.original.toLowerCase().includes('reservation')){
+    return false;
+  }
+  // Intent preservation: if original was about damaged luggage, corrected should also be about it
+  // Simple check: if original contains damaged/suitcase and corrected doesn't, invalid
+  const origLower=(res.original||'').toLowerCase();
+  if(/damaged|broken/.test(origLower) && !/damaged|broken|repair|suitcase|bag/.test(corrLower)){
+    return false;
+  }
+  return true;
+}
+
+function showError(err, isTimeout){
+  const fb=document.getElementById('feedback');
+  fb.classList.remove('hidden');
+  const msg=isTimeout ? 'We couldn\'t check your answer in time. Please try again.' : 'We couldn\'t check your answer. Please try again.';
+  fb.innerHTML=`<div style="text-align:center;padding:8px">
+    <div style="font-weight:700;margin-bottom:4px">Something went wrong</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${msg}</div>
+    <button class="btn primary" id="btn-try-error" style="width:100%">Try Again</button>
+    <button class="btn ghost" id="btn-cancel-error" style="width:100%;margin-top:6px">Cancel</button>
+  </div>`;
+  fb.querySelector('#btn-try-error').addEventListener('click', ()=>{
+    fb.classList.add('hidden');
+    status='idle';
+    document.getElementById('btn-send').disabled=false;
+  });
+  const cancelBtn=fb.querySelector('#btn-cancel-error');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{
+    fb.classList.add('hidden');
+    status='idle';
+  });
+  console.error('[feedback error]', err);
+}
+
+function showCancel(show){
+  let el=document.getElementById('btn-cancel-check');
+  if(show){
+    if(!el){
+      el=document.createElement('button');
+      el.id='btn-cancel-check';
+      el.textContent='Cancel';
+      el.className='chip';
+      el.style.marginLeft='8px';
+      el.addEventListener('click', handleCancel);
+      const actions=document.querySelector('#input-area .input-actions');
+      if(actions) actions.appendChild(el);
+    }
+    el.classList.remove('hidden');
+    el.style.display='inline-flex';
+  } else {
+    if(el) el.remove();
+  }
+}
+function hideCancel(){ showCancel(false); }
+function handleCancel(){
+  if(abortController) abortController.abort();
+  status='idle'; isChecking=false;
+  const btn=document.getElementById('btn-send');
+  btn.textContent='Send'; btn.disabled=false;
+  document.getElementById('answer-input').disabled=false;
+  hideCancel();
+  const fb=document.getElementById('feedback');
+  if(fb) fb.classList.add('hidden');
+}
+
+function logRequest(data){
+  if(typeof console!=='undefined' && console.log){
+    console.log('[ERL]', JSON.stringify({...data, time:new Date().toISOString()}));
+  }
 }
 
 function showFeedback(r){
