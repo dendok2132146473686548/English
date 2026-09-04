@@ -12,6 +12,9 @@ let status='idle'; // idle | checking | success | error
 let currentRequestId=0;
 let abortController=null;
 let isChecking=false; // legacy, kept for compatibility, mirrors status==='checking'
+// Conversation tracking: isolates one dialogue from another (no stale leaks).
+let conversationId=null, messageSeq=0;
+const conversationLog=[]; // {id, scenarioId, conversationId, role, text}
 
 const HOME_CATS_UI=[
   {id:'Travel', icon:'✈️', label:'Travel'},
@@ -56,6 +59,11 @@ function bindEvents(){
     btn.disabled = !document.getElementById('answer-input').value.trim() || isChecking;
   });
   document.getElementById('btn-hint').addEventListener('click', handleHint);
+  document.getElementById('btn-end').addEventListener('click', ()=>{
+    if(status==='checking') return; // don't interrupt an active check; use Cancel
+    if(!turnScores.length){ toast('Answer at least one question first'); return; }
+    finishScenario();
+  });
   document.getElementById('btn-mic').addEventListener('click', toggleMic);
   document.getElementById('btn-hold').addEventListener('pointerdown', startHold);
   document.getElementById('btn-hold').addEventListener('pointerup', stopHold);
@@ -172,8 +180,16 @@ function handleSurprise(){
 function startScenario(id){
   const sc=SCENARIOS[id];
   if(!sc) return;
+  // Cancel any pending request from the previous scenario: its result
+  // must never leak into the new conversation (stale-state protection).
+  if(abortController){ try{ abortController.abort(); }catch(_){} }
+  currentRequestId++;
+  status='idle'; isChecking=false;
   currentScenario=sc;
-  turnIndex=0; turnScores=[]; hintLevel=0; sessionErrors=[]; isChecking=false;
+  conversationId=(sc.meta && sc.meta.conversationId) || ('conv-'+Date.now());
+  messageSeq=0; conversationLog.length=0;
+  conversationLog.push({id:'ctx-'+conversationId, scenarioId:sc.id, conversationId, role:'context', text:sc.desc+' Goal: '+sc.goal});
+  turnIndex=0; turnScores=[]; hintLevel=0; sessionErrors=[];
   showView('practice');
   document.getElementById('practice-category').textContent = sc.title.split(' — ')[0];
   document.getElementById('practice-meta').textContent = `${state.level} · ${sc.meta? sc.meta.category : 'Practice'}`;
@@ -191,11 +207,16 @@ function startScenario(id){
 }
 
 function pushAgent(text){
+  messageSeq++;
+  conversationLog.push({id:'m'+messageSeq, scenarioId:currentScenario.id, conversationId, role:'agent', text});
   const chat=document.getElementById('chat');
   const d=document.createElement('div'); d.className='bubble agent'; d.innerHTML=`<div class="role">${currentScenario.character.role}</div>${text}`;
-  chat.appendChild(d); chat.scrollTop=chat.scrollHeight; speak(text);
+  chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+  try{ speak(text); }catch(e){ console.error('[speak]', e); }
 }
 function pushUser(text){
+  messageSeq++;
+  conversationLog.push({id:'m'+messageSeq, scenarioId:currentScenario.id, conversationId, role:'user', text});
   const chat=document.getElementById('chat');
   const d=document.createElement('div'); d.className='bubble user'; d.textContent=text;
   chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
@@ -210,7 +231,9 @@ async function handleSend(){
 
   const requestId=++currentRequestId;
   const scenarioId=currentScenario.id;
+  const convId=conversationId;
   const turnId=turnIndex;
+  const messageId='m'+(messageSeq+1);
   const startedAt=Date.now();
   status='checking'; isChecking=true;
   abortController=new AbortController();
@@ -224,7 +247,9 @@ async function handleSend(){
   if(micBtn) micBtn.disabled=true;
   showCancel(true);
   pushUser(raw);
-  logRequest({requestId, scenarioId, turnId, raw, startedAt, status:'checking'});
+  logRequest({requestId, scenarioId, conversationId:convId, messageId, turnId, startedAt, status:'checking'});
+
+  const isStale=()=> requestId!==currentRequestId || !currentScenario || currentScenario.id!==scenarioId || conversationId!==convId;
 
   const timeoutMs=8000;
   let timeoutId=null;
@@ -233,18 +258,19 @@ async function handleSend(){
   });
 
   try{
-    // Step 1: Check answer with validation and max 3 attempts
+    // Step 1: Check answer with validation and bounded attempts.
     const res=await Promise.race([
       checkAnswerWithValidation(raw, currentScenario.turns[turnIndex], state.level, currentScenario, requestId, abortController.signal),
       timeoutPromise
     ]);
-    if(requestId!==currentRequestId) return; // stale
+    if(isStale()) return; // response belongs to another scenario — drop it
     if(!res) throw new Error('Empty response');
     if(!isValidFeedback(res, currentScenario)){
       throw new Error('Invalid feedback');
     }
     clearTimeout(timeoutId);
-    // Step 2: Display feedback (always succeeds, separate from Step 3)
+    // Step 2: Display feedback. Separated from Step 3 on purpose:
+    // even if the next AI message fails, the feedback stays on screen.
     if(hintLevel>0) res.score=Math.max(0,res.score - hintLevel*4);
     turnScores.push(res.score);
     if(res.errors.length){
@@ -252,26 +278,25 @@ async function handleSend(){
       if(state.mistakes.length>50) state.mistakes=state.mistakes.slice(0,50);
       saveState();
     }
-    showFeedback(res);
+    showFeedback(res, raw);
     status='success';
-    logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'success', score:res.score});
-    // Step 3: Prepare next turn (separate, errors here don't hide feedback)
-    // nextTurn is triggered by user clicking Continue, not automatically
+    logRequest({requestId, scenarioId, conversationId:convId, messageId, turnId, finishedAt:Date.now(), status:'success', score:res.score});
+    // Step 3: next AI message happens only after user clicks Continue (nextTurn).
   }catch(err){
-    if(requestId!==currentRequestId) return;
+    if(isStale()) return;
     clearTimeout(timeoutId);
     const isTimeout = err && err.message==='timeout';
     const isAbort = err && err.name==='AbortError';
     if(isAbort){
       status='idle';
-      logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'cancelled'});
+      logRequest({requestId, scenarioId, conversationId:convId, messageId, turnId, finishedAt:Date.now(), status:'cancelled'});
     } else {
       status='error';
-      logRequest({requestId, scenarioId, turnId, finishedAt:Date.now(), status:'error', error: err.message});
+      logRequest({requestId, scenarioId, conversationId:convId, messageId, turnId, finishedAt:Date.now(), status:'error', error: err && err.message});
       showError(err, isTimeout);
     }
   }finally{
-    if(requestId===currentRequestId){
+    if(!isStale()){
       clearTimeout(timeoutId);
       abortController=null;
       isChecking=false;
@@ -290,7 +315,9 @@ async function handleSend(){
 }
 
 async function checkAnswerWithValidation(raw, turn, level, scenario, requestId, signal){
-  const MAX_ATTEMPTS=3;
+  // Bounded attempts: 1 initial + MAX_RETRIES, each validated up to
+  // MAX_VALIDATION_ATTEMPTS. Never infinite (§7, §23).
+  const MAX_ATTEMPTS = 1 + (typeof MAX_RETRIES!=='undefined' ? MAX_RETRIES : 2);
   let lastError=null;
   for(let attempt=1; attempt<=MAX_ATTEMPTS; attempt++){
     if(signal && signal.aborted) throw new DOMException('Aborted','AbortError');
@@ -404,12 +431,14 @@ function logRequest(data){
   }
 }
 
-function showFeedback(r){
+function showFeedback(r, raw){
   const fb=document.getElementById('feedback');
   fb.classList.remove('hidden');
   const label=labelForScore(r.score);
+  const detailed = state.feedback==='detailed';
+  const origLine = detailed && raw ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Your answer: “${escapeHtml(raw)}”</div>` : '';
   if(r.errors.length===0){
-    fb.innerHTML=`<div class="score"><span class="badge excellent">✓ Correct</span><span>${r.score}%</span></div>
+    fb.innerHTML=`${origLine}<div class="score"><span class="badge excellent">✓ Correct</span><span>${r.score}%</span></div>
       <div style="font-size:11px;color:var(--muted);margin:6px 0">Grammar: ✓ &nbsp; Vocabulary: ✓ &nbsp; Meaning: ✓</div>
       <button class="btn primary" id="btn-continue" style="width:100%;margin-top:8px">Continue →</button>`;
   } else {
@@ -423,7 +452,7 @@ function showFeedback(r){
         <div class="error-corr">→ ${e.correction}</div>
         <div class="error-exp">${e.explanation}</div>
       </div>`).join('');
-    fb.innerHTML=`<div class="score"><span class="badge ${label.cls}">${r.score}% · ${label.label}</span></div>
+    fb.innerHTML=`${origLine}<div class="score"><span class="badge ${label.cls}">${r.score}% · ${label.label}</span></div>
       <div style="font-size:11px;color:var(--muted);margin:6px 0">${countsHtml}</div>
       ${errorsHtml}
       <button class="btn primary" id="btn-continue" style="width:100%;margin-top:8px">Continue →</button>`;
@@ -440,16 +469,38 @@ function showFeedback(r){
   }
 }
 
+function escapeHtml(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function nextTurn(){
   turnIndex++;
-  document.getElementById('practice-step').textContent = `${Math.min(turnIndex+1, currentScenario.turns.length)} / ${currentScenario.turns.length}`;
-  document.getElementById('practice-progress').style.width = (turnIndex/currentScenario.turns.length*100)+'%';
   if(turnIndex >= currentScenario.turns.length){
-    finishScenario();
-  } else {
-    const turn=currentScenario.turns[turnIndex];
-    setTimeout(()=> pushAgent(turn.agent), 400);
+    // Template turns exhausted: generate the next relevant question from
+    // the CURRENT locked context (dynamic conversation, §5-6).
+    let next=null;
+    try{
+      if(typeof ensureNextTurn==='function') next=ensureNextTurn(currentScenario);
+    }catch(e){ console.error('[followup]', e); next=null; }
+    if(!next){
+      finishScenario(); // MAX_TURNS reached -> controlled auto-finish
+      return;
+    }
   }
+  const total=currentScenario.turns.length;
+  document.getElementById('practice-step').textContent = `${Math.min(turnIndex+1, total)} / ${total}`;
+  document.getElementById('practice-progress').style.width = Math.min(100, turnIndex/total*100)+'%';
+  const turn=currentScenario.turns[turnIndex];
+  if(!turn){ finishScenario(); return; }
+  // Next AI message is isolated: if it fails, feedback stays on screen (§14-15).
+  setTimeout(()=>{
+    try{ pushAgent(turn.agent); }
+    catch(e){
+      console.error('[next-message]', e);
+      toast("Couldn't load the next question. Tap Continue to retry.");
+      turnIndex--; // allow retry of the same step
+    }
+  }, 400);
 }
 
 function handleHint(){

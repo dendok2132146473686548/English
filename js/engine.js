@@ -16,26 +16,50 @@ const RULES = [
 
 const SPELL_MAP = { restorant:'restaurant', adress:'address', recieve:'receive', accomodation:'accommodation', suitcases:'suitcase' };
 
+// Semantic groups: words that express the same intent (§17).
+// Used so "aisle" counts as answering a "window seat?" question, etc.
+const SEMANTIC_SETS = [
+  ['seat','window','aisle','middle','sit','sitting','sat'],
+  ['luggage','suitcase','bag','baggage'],
+  ['damaged','broken','damage','crack','torn','cracked'],
+  ['repair','fix','fixed','mend','repaired'],
+  ['room','hotel','reservation','stay','checkin','checkout'],
+  ['breakfast','dinner','lunch','meal','food'],
+  ['order','menu','dish','chicken','fish','bill','check','table','drink'],
+  ['taxi','driver','road','street','address','ride'],
+  ['shirt','size','small','bigger','clothes','fitting'],
+  ['meeting','appointment','interview','job','work'],
+  ['doctor','symptoms','throat','medicine','appointment','insurance'],
+  ['yes','yeah','sure','okay','ok','course','please'],
+  ['no','not','rather','prefer'],
+  ['thank','thanks'],
+  ['when','what','where','how','much','long'],
+  ['change','rebook','cancel','refund','options'],
+  ['price','cost','pay','card','cash','euros','dollars'],
+];
+
+function semanticGroup(w){
+  for(let i=0;i<SEMANTIC_SETS.length;i++){
+    if(SEMANTIC_SETS[i].includes(w)) return i;
+  }
+  return -1;
+}
+
 function detectIntent(raw, scenario, turn){
   const lower = raw.toLowerCase();
   // Build context keywords from scenario
   const ctxText = ((scenario && scenario.desc)||'') + ' ' + ((scenario && scenario.goal)||'') + ' ' + ((scenario && scenario.meta && scenario.meta.problem)||'') + ' ' + (turn.keywords||[]).join(' ');
   const ctxWords = ctxText.toLowerCase().split(/[^a-z]+/).filter(w=>w.length>2);
   const rawWords = lower.split(/[^a-z]+/).filter(w=>w.length>2);
-  // Check overlap
+  const ctxGroups = {};
+  ctxWords.forEach(w=>{ const g=semanticGroup(w); if(g>=0) ctxGroups[g]=true; });
+  // Check overlap: direct words OR shared semantic group
   let overlap=0;
-  rawWords.forEach(w=>{ if(ctxWords.includes(w)) overlap++; });
-  // Also check for synonyms / related words for damaged luggage
-  const intentKeywords = {
-    'luggage':['luggage','suitcase','bag','baggage'],
-    'damaged':['damaged','broken','damage','crack','torn'],
-    'repair':['repair','fix','remote','mend','help'],
-    'hotel':['room','reservation','hotel','breakfast','check'],
-    'restaurant':['order','chicken','fish','menu','bill'],
-    'taxi':['road','street','wrong','driver','taxi'],
-    'shopping':['shirt','small','bigger','size','clothes'],
-    'work':['meeting','appointment','interview','job']
-  };
+  rawWords.forEach(w=>{
+    if(ctxWords.includes(w)){ overlap++; return; }
+    const g=semanticGroup(w);
+    if(g>=0 && ctxGroups[g]) overlap++;
+  });
   let intentMatch=false;
   // If scenario is about damaged luggage, check if raw mentions luggage/damaged/repair
   const isLuggageScenario = ctxText.toLowerCase().includes('damaged') || ctxText.toLowerCase().includes('luggage') || ctxText.toLowerCase().includes('suitcase');
@@ -44,12 +68,9 @@ function detectIntent(raw, scenario, turn){
   }
   // Generic: if any raw word overlaps with ctxWords, consider intent relevant
   if(overlap>=1) intentMatch=true;
-  // Also if raw contains question words and scenario expects question, consider relevant
   if(intentMatch) return { relevant:true, score: 90 };
-  // Check if raw is completely off-topic (e.g., talks about reservation when scenario is luggage)
-  // If no overlap at all, it's likely off-topic
+  // Check if raw is completely off-topic
   if(overlap===0 && rawWords.length>3){
-    // Check if raw mentions reservation/hotel when scenario is luggage
     if(isLuggageScenario && /reservation|hotel|room|breakfast/.test(lower)) return { relevant:false, score: 20 };
   }
   return { relevant: overlap>0, score: overlap>0? 70 : 30 };

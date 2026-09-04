@@ -107,6 +107,80 @@ const VOCAB_DICT = {
   'prescription':{en:'prescription', ru:'рецепт', level:'B2'},
 };
 
+// Context-locked follow-up questions used to CONTINUE a conversation
+// after template turns are exhausted. Every entry belongs to exactly one
+// category — cross-category drift is impossible by construction.
+const CATEGORY_FOLLOW_UPS = {
+  Travel: [
+    { agent:"Do you still have your baggage receipt with you?", hint:"Say yes and offer it, or say no.", useful:["receipt","here","lost"], example:"Yes, here it is.", keywords:["receipt","here","yes"], correct:"Yes, here it is." },
+    { agent:"Where are you staying in {loc}? We may need to deliver your bag there.", hint:"Name your hotel.", useful:["hotel","stay","address"], example:"At the Central Hotel.", keywords:["hotel","stay","central"], correct:"I am staying at the Central Hotel." },
+    { agent:"Would you like us to contact you by phone or by email about your bag?", hint:"Choose phone or email.", useful:["phone","email","contact"], example:"By phone, please.", keywords:["phone","email"], correct:"Please contact me by phone." },
+  ],
+  Hotels: [
+    { agent:"Would you like me to call you when the room is ready?", hint:"Say yes and give your phone number or name.", useful:["call","phone","name"], example:"Yes, please call me.", keywords:["call","yes","phone"], correct:"Yes, please call me." },
+    { agent:"By the way, do you need a wake-up call tomorrow morning?", hint:"Say what time or say no.", useful:["wake","seven","morning"], example:"Yes, at seven, please.", keywords:["wake","seven","morning"], correct:"Yes, at seven in the morning, please." },
+    { agent:"Would you like help with your luggage to the room?", hint:"Accept or decline politely.", useful:["help","luggage","thanks"], example:"Yes, please. Thank you.", keywords:["help","luggage","thank"], correct:"Yes, please. Thank you." },
+  ],
+  Food: [
+    { agent:"Would you like anything for dessert?", hint:"Order dessert or decline.", useful:["dessert","cake","no thanks"], example:"No, thank you. Just the bill.", keywords:["dessert","cake","bill"], correct:"No, thank you." },
+    { agent:"How would you like to pay — by card or in cash?", hint:"Choose card or cash.", useful:["card","cash","pay"], example:"By card, please.", keywords:["card","cash"], correct:"By card, please." },
+    { agent:"Is there anything else I can bring you?", hint:"Ask or say no, thank you.", useful:["water","bill","thanks"], example:"Just the bill, please.", keywords:["water","bill","thank"], correct:"Just the bill, please." },
+  ],
+  Transport: [
+    { agent:"There's some traffic ahead. Is it okay if we take another road?", hint:"Agree or ask how long.", useful:["okay","long","fine"], example:"That's fine. How long will it take?", keywords:["okay","fine","long"], correct:"That's fine." },
+    { agent:"Could you tell me the exact address once more, please?", hint:"Repeat the address clearly.", useful:["street","number","hotel"], example:"Central Street, number 12.", keywords:["street","central","hotel"], correct:"Central Street, 12." },
+    { agent:"Would you like to pay by card or in cash?", hint:"Choose payment method.", useful:["card","cash"], example:"By card, please.", keywords:["card","cash"], correct:"By card, please." },
+  ],
+  Shopping: [
+    { agent:"Would you like to try it on? The fitting room is over there.", hint:"Say yes or ask for another size.", useful:["try","size","fitting"], example:"Yes, I'd like to try it on.", keywords:["try","size","fitting"], correct:"Yes, I'd like to try it on." },
+    { agent:"Do you need a bag for that?", hint:"Say yes or no.", useful:["bag","yes","no"], example:"Yes, please.", keywords:["bag","yes"], correct:"Yes, please." },
+    { agent:"Would you like to pay by card or in cash?", hint:"Choose payment method.", useful:["card","cash"], example:"By card, please.", keywords:["card","cash"], correct:"By card, please." },
+  ],
+  Work: [
+    { agent:"Could you tell me a bit more about your experience?", hint:"Describe your experience briefly.", useful:["experience","worked","years"], example:"I worked as a manager for three years.", keywords:["experience","worked","years"], correct:"I worked as a manager for three years." },
+    { agent:"Do you have any questions for us?", hint:"Ask about the job.", useful:["salary","schedule","team"], example:"What is the work schedule?", keywords:["schedule","salary","team"], correct:"What is the work schedule?" },
+    { agent:"When could you start if we offer you the position?", hint:"Name a date.", useful:["start","monday","month"], example:"I could start next Monday.", keywords:["start","monday"], correct:"I could start next Monday." },
+  ],
+  Everyday: [
+    { agent:"How long have you had these symptoms?", hint:"Say since when.", useful:["since","days","morning"], example:"Since Monday.", keywords:["since","monday","days"], correct:"Since Monday." },
+    { agent:"Do you have insurance or will you pay directly?", hint:"Say about insurance.", useful:["insurance","pay","card"], example:"I have insurance.", keywords:["insurance","pay"], correct:"I have insurance." },
+    { agent:"Would morning or afternoon be better for your appointment?", hint:"Choose a time.", useful:["morning","afternoon","ten"], example:"Morning, please.", keywords:["morning","afternoon"], correct:"Morning, please." },
+  ],
+  Social: [
+    { agent:"What do you usually do on weekends?", hint:"Talk about your hobbies.", useful:["weekend","like","usually"], example:"I usually go hiking.", keywords:["weekend","hiking","usually"], correct:"I usually go hiking." },
+    { agent:"How long have you been living here?", hint:"Say for how long.", useful:["years","months","since"], example:"For two years.", keywords:["years","months"], correct:"For two years." },
+    { agent:"Would you like to exchange numbers and meet again sometime?", hint:"Accept politely or decline.", useful:["sure","number","great"], example:"Sure, that would be great.", keywords:["sure","number","great"], correct:"Sure, that would be great." },
+  ],
+};
+
+// Generate the next relevant question from the CURRENT context only.
+// Returns a turn object or null when MAX_TURNS is reached (auto-finish).
+function ensureNextTurn(scenario){
+  const meta = scenario.meta || {};
+  if(scenario.turns.length >= MAX_TURNS) return null;
+  const cat = meta.category || 'Travel';
+  const bank = CATEGORY_FOLLOW_UPS[cat] || CATEGORY_FOLLOW_UPS.Travel;
+  meta.usedFollowUps = meta.usedFollowUps || [];
+  let candidates = bank.map((t,i)=>({t,i})).filter(x=>!meta.usedFollowUps.includes(cat+':'+x.i));
+  if(!candidates.length){
+    meta.usedFollowUps = [];
+    candidates = bank.map((t,i)=>({t,i}));
+  }
+  for(let attempt=0; attempt<MAX_VALIDATION_ATTEMPTS; attempt++){
+    const choice = pick(candidates);
+    const turn = JSON.parse(JSON.stringify(choice.t));
+    turn.agent = turn.agent.replace(/\{loc\}/g, meta.location || 'here');
+    if(isRelevant(turn.agent, cat) >= 25){
+      meta.usedFollowUps.push(cat+':'+choice.i);
+      scenario.turns.push(turn);
+      return turn;
+    }
+    candidates = candidates.filter(x=>x.i!==choice.i);
+    if(!candidates.length) break;
+  }
+  return null;
+}
+
 function pick(arr, rng=Math.random){ return arr[Math.floor(rng()*arr.length)]; }
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31 + s.charCodeAt(i))>>>0; return h; }
 function seededRng(seed){ let s=seed>>>0; return ()=> (s=(s*1664525+1013904223)>>>0)/4294967296; }
@@ -151,22 +225,35 @@ function getVocabForTurn(turn, level){
   return words.slice(0,4);
 }
 
+// Retry / regeneration limits — no infinite loops anywhere.
+const MAX_RETRIES = 2;
+const MAX_REGENERATIONS = 2;
+const MAX_VALIDATION_ATTEMPTS = 2;
+const MAX_TURNS = 12; // soft cap: template turns + generated follow-ups, then auto-finish
+
+// Neutral service phrases that are valid inside ANY scenario
+// (acknowledgments, politeness — must not be treated as off-topic).
+const GENERIC_SERVICE = ['thank','sorry','please','understand','check','moment','confirm','sure','okay','yes','help','patience','wait','welcome','great','perfect','wonderful'];
+
 function isRelevant(message, category){
   const kws=CATEGORY_KEYWORDS[category]||[];
-  const lower=message.toLowerCase();
+  const lower=(message||'').toLowerCase();
   let score=0;
   kws.forEach(k=>{ if(lower.includes(k)) score++; });
-  // Also check that message does NOT contain keywords from other categories strongly
   let otherScore=0;
   Object.keys(CATEGORY_KEYWORDS).forEach(cat=>{
     if(cat===category) return;
     CATEGORY_KEYWORDS[cat].forEach(k=>{ if(lower.includes(k)) otherScore++; });
   });
-  // relevance 0-100
-  const relevance = kws.length ? Math.round((score / Math.max(1,kws.length*0.4))*100) : 50;
-  // penalize if other category keywords dominate
-  if(otherScore > score && score<2) return 20;
-  return Math.min(100, relevance);
+  // Strong signal of ANOTHER scenario -> block.
+  if(otherScore > score && score < 2) return 15;
+  // Context-specific message.
+  if(score > 0) return Math.min(100, 55 + score * 15);
+  // Neutral acknowledgment inside current scenario -> allowed.
+  const generic = GENERIC_SERVICE.some(w=>lower.includes(w));
+  if(generic && otherScore === 0) return 50;
+  if(otherScore === 0) return 35;
+  return 20;
 }
 
 function buildTurns(template, location, level, problem){
@@ -271,7 +358,7 @@ function getPurposeCats(){
   return p && p.cats ? p.cats : null;
 }
 
-function generateScenario(opts={}){
+function generateScenario(opts={}, depth=0){
   const level = opts.level || state.level || 'B1';
   let catName = opts.category;
   if(!catName || !CATEGORIES[catName]){
@@ -302,22 +389,22 @@ function generateScenario(opts={}){
     constraints:[`Stay in ${catName}`, `Goal: ${goal}`]
   };
 
-  // Validate each turn
+  // Validate each turn; bounded regeneration (never infinite).
   let valid=true;
   for(const t of turns){
-    if(isRelevant(t.agent, catName) < 25) valid=false;
+    if(isRelevant(t.agent, catName) < 25){ valid=false; break; }
   }
-  if(!valid && tries<3){
-    // regenerate with different template
-    return generateScenario({...opts, template:pick(pool)});
+  if(!valid && depth < MAX_REGENERATIONS){
+    return generateScenario({...opts, template:pick(pool)}, depth+1);
   }
 
   const id = 'gen-'+Date.now()+'-'+Math.floor(Math.random()*10000);
+  const conversationId = 'conv-'+Date.now()+'-'+Math.floor(Math.random()*100000);
   const scenario = {
     id, icon:tmpl.icon, title:`${tmpl.title} — ${location}`, goal,
     desc:`You are in ${location}. ${problem}. Goal: ${goal}.`,
     character, turns,
-    meta:{category:catName, templateId:tmpl.id, location, problem, level, generated:true, lockedContext}
+    meta:{category:catName, templateId:tmpl.id, location, problem, level, generated:true, lockedContext, conversationId, usedFollowUps:[]}
   };
   if(!state.generatedHistory) state.generatedHistory=[];
   state.generatedHistory.push({id, templateId:tmpl.id, category:catName, location, problem, date:new Date().toISOString().slice(0,10)});
